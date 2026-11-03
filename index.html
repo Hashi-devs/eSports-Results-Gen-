@@ -1,0 +1,1921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Match Day Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Bebas+Neue&family=Anton&family=Oswald:wght@300..700&family=Teko:wght@300..700&family=Rajdhani:wght@400;500;600;700&family=Barlow+Condensed:wght@400;500;600;700;800;900&family=Saira+Condensed:wght@400;500;600;700;800;900&family=Orbitron:wght@400..900&family=Russo+One&family=Chakra+Petch:wght@400;500;600;700&family=Montserrat:wght@400..900&family=Black+Ops+One&family=Exo+2:wght@400..900&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Garet by Spacetype (free font; licence allows embedding in web apps) */
+@font-face{font-family:"Garet";src:url("fonts/Garet-Book.otf") format("opentype");font-weight:100 600;font-display:swap}
+@font-face{font-family:"Garet";src:url("fonts/Garet-Heavy.otf") format("opentype");font-weight:700 900;font-display:swap}
+:root{
+  /* Esports broadcast desk: near-black panels, one neon-lime accent, condensed uppercase display type, sharp corners.
+     Phones: one column. Wide screens: preview left, controls right. */
+  --bg:#07090d; --panel:#0e1218; --panel-2:#151b24; --line:#222b37; --line-2:#2f3a49; --text:#f2f5f8; --muted:#8c97a6;
+  --accent:#c6ff1a; --accent-ink:#0a0e00; --live:#ff3b4a; --spot:#c6ff1a; --bad:#ff5c69; --ok:#3ddc97; --warn:#ffb547;
+  --display:"Barlow Condensed", "Bebas Neue", Impact, sans-serif;
+  --body:"Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+body{background:radial-gradient(1200px 500px at 85% -10%, rgba(198,255,26,.07), transparent 60%), var(--bg)}
+h1,h2,h3{font-family:var(--display);font-weight:800;text-transform:uppercase;letter-spacing:.01em;line-height:.95;text-wrap:balance;margin:0}
+h2{font-size:2.2rem}
+h3{font-size:1.35rem;letter-spacing:.02em}
+p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+img{max-width:100%}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hidden{display:none !important}
+.muted{color:var(--muted)}
+.small{font-size:.85rem}
+.kicker{font-family:var(--display);font-weight:700;font-size:.85rem;letter-spacing:.28em;text-transform:uppercase;color:var(--accent)}
+.lime{color:var(--accent)}
+
+/* header */
+.ticker{background:var(--accent);color:var(--accent-ink);font-family:var(--display);font-weight:800;font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;overflow:hidden;white-space:nowrap}
+.ticker-in{max-width:1180px;margin:0 auto;padding:5px 16px;display:flex;gap:28px;align-items:center}
+.ticker .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--live);margin-right:7px;vertical-align:1px;box-shadow:0 0 0 3px rgba(255,59,74,.25)}
+.top{position:sticky;top:0;z-index:20;background:rgba(7,9,13,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top-in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto}
+.mark{width:30px;height:30px;border:2px solid var(--accent);display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 70%,70% 100%,0 100%)}
+.mark span{width:10px;height:10px;background:var(--accent)}
+.brand h1{font-size:1.55rem;letter-spacing:.03em}
+.brand h1 b{color:var(--accent);font-weight:800}
+.badge{font-family:var(--display);font-weight:700;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
+.badge.cloud{border-color:rgba(61,220,151,.45);color:var(--ok)}
+.badge.local{border-color:rgba(255,181,71,.5);color:var(--warn)}
+.tabs{display:flex;gap:2px}
+.tabs a{padding:8px 14px;text-decoration:none;color:var(--muted);font-family:var(--display);font-weight:700;font-size:1rem;letter-spacing:.1em;text-transform:uppercase;border-bottom:2px solid transparent}
+.tabs a:hover{color:var(--text)}
+.tabs a.on{color:var(--text);border-bottom-color:var(--accent)}
+main{max-width:1180px;margin:0 auto;padding:22px 16px 80px}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;border:1px solid var(--line-2);background:var(--panel-2);font-family:var(--display);font-weight:700;font-size:.98rem;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap;text-decoration:none;color:var(--text);min-height:42px;border-radius:2px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);clip-path:polygon(0 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--bad)}
+.btn.armed{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.sm{padding:6px 11px;min-height:36px;font-size:.88rem}
+.btn[disabled]{opacity:.5;pointer-events:none}
+.file-btn input{display:none}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field>label,.lab{font-family:var(--display);font-size:.8rem;color:var(--muted);font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+input[type=text],input[type=number],input:not([type]),select,textarea{background:#0a0d12;border:1px solid var(--line);border-radius:2px;padding:9px 10px;width:100%;min-height:42px}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none}
+textarea{min-height:110px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem}
+input[type=color]{width:44px;height:42px;padding:2px;border:1px solid var(--line);border-radius:2px;background:#0a0d12}
+input[type=file]{font-size:.85rem;max-width:100%}
+.check{display:flex;align-items:center;gap:8px;font-size:.9rem}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+.seg{display:flex;border:1px solid var(--line)}
+.seg button{flex:1;background:#0a0d12;border:0;padding:8px 6px;font-family:var(--display);font-size:.85rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer;min-height:40px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--accent);color:var(--accent-ink)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:16px;display:flex;flex-direction:column;gap:12px;position:relative}
+.card.hot::before{content:"";position:absolute;left:-1px;right:-1px;top:-1px;height:2px;background:var(--accent)}
+details.card>summary{cursor:pointer;font-family:var(--display);font-weight:800;text-transform:uppercase;font-size:1.3rem;list-style:none}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary::after{content:" +";color:var(--accent)}
+details.card[open]>summary::after{content:" –"}
+details>summary.lab::marker{color:var(--accent)}
+.help{font-size:.86rem;color:var(--muted);max-width:65ch}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.gridf{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;background:#0a0d12;border:1px solid var(--line);padding:2px 6px}
+
+/* templates page */
+.hero{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:22px;align-items:end;margin-bottom:22px}
+.hero h2{font-size:clamp(2.6rem,7vw,4.6rem);line-height:.9}
+.hero .sub{margin-top:12px;color:var(--muted);max-width:52ch}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.stat{background:var(--panel);border:1px solid var(--line);padding:12px;clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%)}
+.stat b{display:block;font-family:var(--display);font-weight:800;font-size:2rem;line-height:1;font-variant-numeric:tabular-nums}
+.stat span{font-family:var(--display);font-weight:700;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
+.step{background:var(--panel);border:1px solid var(--line);padding:12px 14px;display:flex;gap:12px;font-size:.88rem;color:var(--muted)}
+.step b{font-family:var(--display);font-weight:800;font-size:1.7rem;color:var(--accent);line-height:1}
+.step strong{display:block;color:var(--text);font-family:var(--display);font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:1.05rem}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.tcard{background:var(--panel);border:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s}
+.tcard:hover{border-color:var(--line-2)}
+.thumb{aspect-ratio:4/3;background:#05070a repeating-conic-gradient(#0c1016 0% 25%,#07090d 0% 50%) 50%/20px 20px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+.thumb img{max-height:100%;max-width:100%;object-fit:contain;display:block}
+.tbody{padding:12px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line)}
+.tname{font-family:var(--display);font-weight:800;font-size:1.25rem;text-transform:uppercase;letter-spacing:.02em;display:flex;gap:8px;align-items:center;flex-wrap:wrap;overflow-wrap:anywhere;line-height:1.05}
+.meta{font-family:var(--display);font-weight:600;font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.chip{font-family:var(--display);font-size:.7rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:2px 7px;background:rgba(255,181,71,.14);color:var(--warn)}
+.chip.lime{background:rgba(198,255,26,.12);color:var(--accent)}
+.note{background:rgba(198,255,26,.06);border:1px solid rgba(198,255,26,.3);padding:12px 14px;font-size:.9rem;margin-bottom:14px}
+
+/* editor */
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.bar .grow{flex:1;min-width:160px}
+.status{font-family:var(--display);font-weight:700;font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.ed{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
+.stage-wrap{background:#05070a repeating-conic-gradient(#0c1016 0% 25%,#07090d 0% 50%) 50%/20px 20px;border:1px solid var(--line);overflow:auto;max-height:72vh;position:relative}
+.stage{position:relative;margin:0 auto}
+.stage canvas{display:block;width:100%;height:auto}
+.overlay{position:absolute;inset:0;touch-action:auto}
+.overlay.drawing{touch-action:none;cursor:crosshair}
+.box{position:absolute;border:2px dashed var(--spot);background:rgba(198,255,26,.07);touch-action:none;cursor:move;min-width:6px;min-height:6px}
+.box.sel{border-style:solid;background:rgba(198,255,26,.15);box-shadow:0 0 0 1px rgba(0,0,0,.7)}
+.box .lbl{position:absolute;left:-2px;top:-19px;font-family:var(--display);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:var(--spot);color:var(--accent-ink);padding:1px 6px;white-space:nowrap;pointer-events:none;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.box .handle{position:absolute;right:-12px;bottom:-12px;width:24px;height:24px;border-radius:50%;background:var(--spot);border:3px solid #07090d;cursor:nwse-resize}
+.box.ghost{border-style:solid;pointer-events:none}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chips button{background:var(--panel);border:1px solid var(--line);padding:5px 10px;font-family:var(--display);font-weight:700;font-size:.82rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;color:var(--muted)}
+.chips button.on{border-color:var(--accent);color:var(--text)}
+.panel{position:sticky;top:76px}
+.panel .card{gap:14px}
+.arrows{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+
+/* fill */
+.fill{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px;align-items:start}
+.preview{position:sticky;top:76px;display:flex;flex-direction:column;gap:10px}
+.pv{background:#05070a repeating-conic-gradient(#0c1016 0% 25%,#07090d 0% 50%) 50%/20px 20px;border:1px solid var(--line);display:flex;justify-content:center;align-items:center;padding:8px;min-height:200px}
+.pv canvas{max-width:100%;max-height:64vh;width:auto;height:auto;display:block}
+.form{display:flex;flex-direction:column;gap:14px}
+.tablewrap{overflow-x:auto;border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{font-family:var(--display);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700;background:var(--panel-2);white-space:nowrap}
+tbody tr:hover td{background:rgba(255,255,255,.02)}
+td.n{font-family:var(--display);font-weight:800;font-variant-numeric:tabular-nums;color:var(--accent);width:36px;text-align:center;font-size:1rem}
+td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
+.bout{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.bout figure{margin:0;background:var(--panel-2);border:1px solid var(--line);padding:6px;display:flex;flex-direction:column;gap:6px}
+.bout img{display:block}
+.bout figcaption{font-size:.75rem;color:var(--muted);overflow-wrap:anywhere}
+
+/* teams & fonts */
+.tlist{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.titem{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);padding:10px}
+.logo{width:56px;height:56px;flex:none;background:#05070a repeating-conic-gradient(#0c1016 0% 25%,#07090d 0% 50%) 50%/12px 12px;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:.7rem;color:var(--muted)}
+.logo img{max-width:100%;max-height:100%;object-fit:contain}
+.tinfo{flex:1;min-width:0}
+.tinfo b{display:block;overflow-wrap:anywhere;font-family:var(--display);font-weight:800;font-size:1.15rem;text-transform:uppercase;letter-spacing:.02em}
+.layout2{display:grid;grid-template-columns:340px minmax(0,1fr);gap:18px;align-items:start}
+.fontrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:var(--panel-2);border:1px solid var(--line)}
+.fontrow .sample{font-size:1.6rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fontlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px}
+
+/* toast & modal */
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--panel-2);border:1px solid var(--line-2);border-left:3px solid var(--accent);padding:10px 16px;font-size:.9rem;z-index:70;max-width:min(92vw,520px);box-shadow:0 10px 30px rgba(0,0,0,.6)}
+#toast.bad{border-left-color:var(--bad)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal .card{max-width:640px;width:100%;max-height:92vh;overflow:auto}
+.modal .card::before{content:"";position:absolute;left:-1px;right:-1px;top:-1px;height:2px;background:var(--accent)}
+.modal img{display:block;margin:0 auto;max-height:65vh}
+.empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line-2)}
+
+@media (max-width: 900px){
+  .ed,.fill,.layout2,.hero{grid-template-columns:1fr}
+  .panel,.preview{position:static}
+  .stage-wrap{max-height:62vh}
+}
+@media (max-width: 560px){
+  .steps{grid-template-columns:1fr}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .brand h1{font-size:1.35rem}
+  .tabs{width:100%}
+  .tabs a{flex:1;text-align:center;padding:8px 6px}
+  h2{font-size:1.9rem}
+  .grid4{grid-template-columns:repeat(2,1fr)}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+<div class="ticker" aria-hidden="true"><div class="ticker-in"><span><span class="dot"></span>Match day ready</span><span>Results graphics in seconds</span><span>Any game · Any design</span></div></div>
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><div class="mark" aria-hidden="true"><span></span></div><h1>Match Day <b>Studio</b></h1><span id="store-badge" class="badge">Loading…</span></div>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#templates" data-tab="templates" class="on">Templates</a>
+      <a href="#teams" data-tab="teams">Teams</a>
+      <a href="#fonts" data-tab="fonts">Fonts</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- TEMPLATES -->
+  <section id="view-templates">
+    <div class="hero">
+      <div>
+        <p class="kicker">Results graphics · Any game</p>
+        <h2>Fill the table.<br><span class="lime">Post the results.</span></h2>
+        <p class="sub">Upload your design once. The spots are found for you, results come in from a spreadsheet or a screenshot, and the graphic comes out at full quality.</p>
+        <div class="row" style="margin-top:16px"><label class="btn primary file-btn" for="tpl-upload"><input type="file" id="tpl-upload" accept="image/png,image/jpeg,image/webp">Upload template design</label></div>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="steps">
+      <div class="step"><b>01</b><span><strong>Upload</strong>Your finished design at full size, with dashes, placeholder text or empty cells where results go.</span></div>
+      <div class="step"><b>02</b><span><strong>Check the spots</strong>Rows and columns are found for you. Name them, pick the font, done.</span></div>
+      <div class="step"><b>03</b><span><strong>Import & post</strong>Drop in results or type them, then download. Same size, same quality.</span></div>
+    </div>
+    <div class="head"><h3>Your templates</h3></div>
+    <div id="tpl-note"></div>
+    <div id="tpl-grid" class="tgrid"><div class="empty">Loading your templates…</div></div>
+  </section>
+
+  <!-- EDITOR -->
+  <section id="view-edit" class="hidden">
+    <div class="bar">
+      <button class="btn ghost" data-act="back">← Templates</button>
+      <input id="ed-name" class="grow" aria-label="Template name" placeholder="Template name">
+      <span id="ed-status" class="status"></span>
+      <button class="btn primary" data-act="to-fill">Fill in results →</button>
+    </div>
+    <div class="bar">
+      <button class="btn" id="draw-btn" data-act="draw">＋ Draw spot</button>
+      <button class="btn sm" data-act="zoom-out" aria-label="Zoom out">−</button>
+      <button class="btn sm" data-act="zoom-fit">Fit</button>
+      <button class="btn sm" data-act="detect">Find spots</button>
+      <button class="btn sm ghost hidden" id="restore-btn" data-act="restore-original">Restore original design</button>
+      <button class="btn sm" data-act="zoom-in" aria-label="Zoom in">＋</button>
+      <label class="btn sm file-btn" for="replace-img"><input type="file" id="replace-img" accept="image/png,image/jpeg,image/webp">Replace design image</label>
+    </div>
+    <div class="ed">
+      <div>
+        <div class="stage-wrap" id="ed-wrap">
+          <div class="stage" id="ed-stage">
+            <canvas id="ed-canvas"></canvas>
+            <div class="overlay" id="ed-overlay"></div>
+          </div>
+        </div>
+        <div class="chips" id="ed-chips"></div>
+        <details class="card" id="repeat" style="margin-top:12px">
+          <summary>Repeat a row (standings tables)</summary>
+          <p class="help">Mark row 1 of your table (team, logo, kills, points…), set each spot's Row to 1, then copy it down for the other rows. Existing spots in those rows are replaced.</p>
+          <div class="grid4">
+            <div class="field"><label for="rep-row">Copy row</label><input type="number" id="rep-row" min="1" value="1"></div>
+            <div class="field"><label for="rep-count">Extra rows</label><input type="number" id="rep-count" min="1" value="9"></div>
+            <div class="field"><label for="rep-dy">Down (px)</label><input type="number" id="rep-dy" value="80"></div>
+            <div class="field"><label for="rep-dx">Right (px)</label><input type="number" id="rep-dx" value="0"></div>
+          </div>
+          <div class="row"><button class="btn primary" data-act="repeat">Copy row down</button></div>
+        </details>
+      </div>
+      <div class="panel" id="ed-panel"></div>
+    </div>
+  </section>
+
+  <!-- FILL -->
+  <section id="view-fill" class="hidden">
+    <div class="bar">
+      <button class="btn ghost" data-act="back">← Templates</button>
+      <h2 id="fill-title" class="grow" style="font-size:1.4rem"></h2>
+      <button class="btn" data-act="to-edit">Mark spots</button>
+    </div>
+    <div class="fill">
+      <div class="preview">
+        <div class="pv"><canvas id="fill-canvas"></canvas></div>
+        <div class="row">
+          <button class="btn primary" data-act="download" id="dl-btn">Download PNG</button>
+          <button class="btn ghost" data-act="clear-fill">Clear entries</button>
+          <span id="fill-size" class="muted small"></span>
+        </div>
+      </div>
+      <div class="form" id="fill-form"></div>
+    </div>
+  </section>
+
+  <!-- TEAMS -->
+  <section id="view-teams" class="hidden">
+    <div class="head">
+      <div><h2>Teams</h2><p class="muted small" id="team-count"></p></div>
+    </div>
+    <div class="layout2">
+      <div class="form">
+        <form class="card" id="team-form" autocomplete="off">
+          <h3 id="team-form-title">Add a team</h3>
+          <div class="field"><label for="tm-name">Team name</label><input id="tm-name" required placeholder="Lagos Lions"></div>
+          <div class="field"><label for="tm-tag">Short tag (optional)</label><input id="tm-tag" placeholder="LGL" maxlength="12"></div>
+          <div class="field"><label for="tm-logo">Logo (PNG with transparent background works best)</label><input type="file" id="tm-logo" accept="image/png,image/webp,image/jpeg,image/svg+xml"></div>
+          <div class="row"><div class="logo" id="tm-preview">No logo</div><span class="muted small" id="tm-logo-note"></span></div>
+          <div class="row">
+            <button class="btn primary" type="submit" id="tm-save">Save team</button>
+            <button class="btn ghost hidden" type="button" data-act="team-cancel" id="tm-cancel">Cancel</button>
+          </div>
+        </form>
+        <div class="card">
+          <h3>Add many at once</h3>
+          <p class="help">Pick all your logo files together. Each file becomes a team named after the file, so name them like <code>Lagos Lions.png</code>. Add tags afterwards if you need them.</p>
+          <label class="btn file-btn" for="bulk-logos"><input type="file" id="bulk-logos" multiple accept="image/png,image/webp,image/jpeg,image/svg+xml">Choose logo files</label>
+        </div>
+      </div>
+      <div class="form">
+        <input id="team-search" placeholder="Search teams" aria-label="Search teams">
+        <ul class="tlist" id="team-list"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- FONTS -->
+  <section id="view-fonts" class="hidden">
+    <div class="head">
+      <div><h2>Fonts</h2><p class="muted small">Use the exact fonts from your designs so the results match.</p></div>
+      <label class="btn primary file-btn" for="font-upload"><input type="file" id="font-upload" multiple accept=".ttf,.otf,.woff,.woff2">Upload font files</label>
+    </div>
+    <div class="form">
+      <div class="card">
+        <h3>Your fonts</h3>
+        <div id="my-fonts" class="fontlist"></div>
+        <p class="help">TTF, OTF, WOFF or WOFF2. Pick all the weights at once (for example Garet Book and Garet Heavy). The weight is read from the file name, so both appear as one font with two weights.</p>
+      </div>
+      <div class="card">
+        <h3>Built-in fonts</h3>
+        <div id="builtin-fonts" class="fontlist"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+<div id="claude-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cl-title">
+  <div class="card">
+    <h3 id="cl-title">No table found automatically</h3>
+    <p class="help">This design has no repeated rows or placeholders the app can measure. Claude can look at it and point out where the names, logos and scores go. You'll check everything before anything changes.</p>
+    <div class="row"><button class="btn primary" data-act="ask-claude">Ask Claude to find the spots</button><button class="btn ghost" data-act="claude-cancel">I'll mark them myself</button></div>
+  </div>
+</div>
+<div id="detect-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dt-title">
+  <div class="card">
+    <h3 id="dt-title">Table found</h3>
+    <p class="help" id="dt-summary"></p>
+    <div class="field"><label for="dt-preset">Columns</label><select id="dt-preset"></select></div>
+    <div id="dt-cols" class="form" style="gap:8px"></div>
+    <div class="grid2">
+      <div class="field"><label for="dt-font">Font</label><select id="dt-font"></select></div>
+      <div class="field"><label for="dt-weight">Weight</label><select id="dt-weight"></select></div>
+      <div class="field"><label for="dt-color">Text colour</label><div class="row" style="flex-wrap:nowrap"><input type="color" id="dt-color" aria-label="Text colour"><input id="dt-colorhex" aria-label="Colour code"></div></div>
+      <div class="field"><label for="dt-size">Text size (% of row)</label><input type="number" id="dt-size" min="20" max="95" value="48"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="dt-clean" checked> Remove the dashes from the design</label>
+    <p class="help" id="dt-replace"></p>
+    <div class="row"><button class="btn primary" data-act="detect-apply">Set up the spots</button><button class="btn ghost" data-act="detect-cancel">I'll mark them myself</button></div>
+    <p class="help" id="dt-claude">Not right? <button class="btn sm" data-act="ask-claude">Ask Claude to look instead</button></p>
+  </div>
+</div>
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><h3 id="modal-title">Save your graphic</h3><button class="btn sm" data-act="modal-close">Close</button></div>
+    <p class="help" id="modal-help">Press and hold the image, then choose Download image.</p>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ---------- basics ---------- */
+const BUILTIN_FONTS = ['Garet','Bebas Neue','Anton','Oswald','Teko','Rajdhani','Barlow Condensed','Saira Condensed','Orbitron','Russo One','Chakra Petch','Black Ops One','Exo 2','Montserrat','Bricolage Grotesque','IM Fell English'];
+const FONT_FALLBACK = {Garet: 'Montserrat'};
+const UPLOAD_ONLY = [];
+const WEIGHT_WORDS = [['thin',100],['hairline',100],['extralight',200],['ultralight',200],['light',300],['book',400],['regular',400],['normal',400],['medium',500],['semibold',600],['demibold',600],['bold',700],['extrabold',800],['ultrabold',800],['heavy',800],['black',900]];
+function parseFontName(file){
+  let base = file.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim();
+  base = base.replace(/\b(extra|ultra|semi|demi)\s+(bold|light)\b/ig, '$1$2');
+  let weight = 400;
+  const keep = base.split(' ').filter(w => { const m = WEIGHT_WORDS.find(x => x[0] === w.toLowerCase()); if (m) { weight = m[1]; return false; } return !/^(italic|oblique|webfont)$/i.test(w); });
+  return {family: keep.join(' ').trim() || base, weight};
+}
+const WEIGHT_NAME = {100:'Thin',200:'ExtraLight',300:'Light',400:'Regular',500:'Medium',600:'SemiBold',700:'Bold',800:'Heavy',900:'Black'};
+const TYPE_LABEL = {text:'Text / number', teamName:'Team name', teamTag:'Team short tag', teamLogo:'Team logo', image:'Picture'};
+const TYPE_SHORT = {text:'Text', teamName:'Name', teamTag:'Tag', teamLogo:'Logo', image:'Picture'};
+const S = {store:null, downloads:null, templates:[], teams:[], fonts:[], view:'templates', cur:null, sel:null, scale:1, fit:true, drawMode:false, fill:null, editTeam:null, batch:[]};
+const MEM = new Map();
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const idSafe = s => String(s).replace(/[^A-Za-z0-9]+/g, '-');
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const keyOf = z => (z.field || '') + '|' + (z.row || 0);
+const isTeamType = t => t === 'teamName' || t === 'teamTag' || t === 'teamLogo';
+const errMsg = e => (e && (e.message || e.code)) || 'Something went wrong';
+function debounce(fn, ms){ let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+let toastT;
+function toast(msg, bad){ const el = $('#toast'); el.textContent = msg; el.className = bad ? 'bad' : ''; clearTimeout(toastT); toastT = setTimeout(() => el.classList.add('hidden'), bad ? 6000 : 3200); }
+function canvasBlob(cv, type='image/png'){ return new Promise((res, rej) => { try { cv.toBlob(b => b ? res(b) : rej(new Error('Could not create the image')), type); } catch (e) { rej(e); } }); }
+async function imageSize(file){ const url = URL.createObjectURL(file); try { const im = new Image(); im.src = url; await im.decode(); return {w: im.naturalWidth, h: im.naturalHeight}; } finally { URL.revokeObjectURL(url); } }
+function fontType(name){ const e = name.split('.').pop().toLowerCase(); return {ttf:'font/ttf', otf:'font/otf', woff:'font/woff', woff2:'font/woff2'}[e] || ''; }
+
+/* ---------- storage ---------- */
+function cloudStore(db, assets){
+  return {
+    mode: 'cloud',
+    async list(c){ const s = await db.collection(c).get(); return s.docs.map(d => Object.assign({id: d.id}, d.data())); },
+    async put(c, id, data){ const body = JSON.parse(JSON.stringify(data)); delete body.id; delete body.example; await db.collection(c).doc(id).set(body); },
+    async del(c, id){ await db.collection(c).doc(id).delete(); },
+    async putBlob(blob, type){ const r = await assets.upload(blob, type ? {type} : undefined); return r.id; },
+    async getBlob(ref){ const r = await fetch('/_blob/' + ref); if (!r.ok) throw new Error('missing'); return r.blob(); },
+    async delBlob(ref){ try { await assets.delete(ref); } catch (e) {} },
+  };
+}
+function localStore(){
+  let dbp = null;
+  const mem = {templates:new Map(), teams:new Map(), fonts:new Map(), blobs:new Map()};
+  try {
+    dbp = new Promise((res, rej) => {
+      const r = indexedDB.open('matchday-studio', 1);
+      r.onupgradeneeded = () => { const d = r.result; ['templates','teams','fonts','blobs'].forEach(n => d.createObjectStore(n)); };
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }).catch(() => null);
+  } catch (e) { dbp = Promise.resolve(null); }
+  const tx = async (store, mode, fn) => {
+    const d = await dbp;
+    if (!d) return fn(null, mem[store]);
+    return new Promise((res, rej) => { const t = d.transaction(store, mode); const os = t.objectStore(store); const out = fn(os, null); t.oncomplete = () => res(out && out.result !== undefined ? out.result : out); t.onerror = () => rej(t.error); });
+  };
+  return {
+    mode: 'local',
+    async list(c){
+      const d = await dbp;
+      if (!d) return [...mem[c].entries()].map(([id, v]) => Object.assign({id}, v));
+      return new Promise((res, rej) => { const out = []; const t = d.transaction(c, 'readonly'); const req = t.objectStore(c).openCursor(); req.onsuccess = () => { const cur = req.result; if (cur) { out.push(Object.assign({id: cur.key}, cur.value)); cur.continue(); } else res(out); }; req.onerror = () => rej(req.error); });
+    },
+    async put(c, id, data){ const body = JSON.parse(JSON.stringify(data)); delete body.id; delete body.example; await tx(c, 'readwrite', (os, m) => os ? os.put(body, id) : m.set(id, body)); },
+    async del(c, id){ await tx(c, 'readwrite', (os, m) => os ? os.delete(id) : m.delete(id)); },
+    async putBlob(blob){ const id = 'local-' + uid(); await tx('blobs', 'readwrite', (os, m) => os ? os.put(blob, id) : m.set(id, blob)); return id; },
+    async getBlob(ref){
+      const d = await dbp;
+      if (!d) { const b = mem.blobs.get(ref); if (!b) throw new Error('missing'); return b; }
+      return new Promise((res, rej) => { const req = d.transaction('blobs', 'readonly').objectStore('blobs').get(ref); req.onsuccess = () => req.result ? res(req.result) : rej(new Error('missing')); req.onerror = () => rej(req.error); });
+    },
+    async delBlob(ref){ try { await tx('blobs', 'readwrite', (os, m) => os ? os.delete(ref) : m.delete(ref)); } catch (e) {} },
+  };
+}
+async function initStore(){
+  for (let i = 0; i < 15 && !(window.claude && typeof window.claude.use === 'function'); i++) await new Promise(r => setTimeout(r, 100));
+  let db = null, assets = null, downloads = null;
+  if (window.claude && typeof window.claude.use === 'function') {
+    [db, assets, downloads, S.sample] = await Promise.all(['db','assets','downloads','sample'].map(n => Promise.resolve().then(() => window.claude.use(n)).catch(() => null)));
+  }
+  S.downloads = downloads;
+  return (db && assets) ? cloudStore(db, assets) : localStore();
+}
+
+/* ---------- images & fonts ---------- */
+const imgCache = new Map();
+function loadImage(ref){
+  if (!ref) return Promise.resolve(null);
+  if (MEM.has(ref)) return Promise.resolve(MEM.get(ref));
+  if (imgCache.has(ref)) return imgCache.get(ref);
+  const p = (async () => {
+    const img = new Image();
+    let blob = null;
+    try { blob = await S.store.getBlob(ref); } catch (e) {}
+    if (blob) img.src = URL.createObjectURL(blob);
+    else if (S.store.mode === 'cloud') { img.crossOrigin = 'anonymous'; img.src = '/_blob/' + ref; }
+    else return null;
+    try { await img.decode(); } catch (e) { if (!img.naturalWidth) return null; }
+    if (!img.naturalWidth) { img.width = 512; img.height = 512; }
+    return img;
+  })();
+  imgCache.set(ref, p);
+  p.then(v => { if (!v) imgCache.delete(ref); });
+  return p;
+}
+function imgSrc(im){ if (!im) return ''; if (im instanceof HTMLCanvasElement) { if (!im._url) im._url = im.toDataURL('image/png'); return im._url; } return im.src; }
+const fontLoads = new Map();
+function ensureFont(fam, w){
+  const k = fam + '|' + w;
+  if (!fontLoads.has(k)) fontLoads.set(k, Promise.race([Promise.all([document.fonts.load(`${w} 64px "${fam}"`).catch(() => {}), FONT_FALLBACK[fam] ? document.fonts.load(`${w} 64px "${FONT_FALLBACK[fam]}"`).catch(() => {}) : null]), new Promise(r => setTimeout(r, 4000))]));
+  return fontLoads.get(k);
+}
+async function registerFont(f){
+  try { const blob = await S.store.getBlob(f.ref); const ff = new FontFace(f.family, await blob.arrayBuffer(), {weight: String(f.weight || 400)}); await ff.load(); document.fonts.add(ff); f.ok = true; fontLoads.clear(); }
+  catch (e) { f.ok = false; }
+}
+function allFontNames(){ return [...new Set([...S.fonts.filter(f => f.ok !== false).map(f => f.family), ...BUILTIN_FONTS])]; }
+const hasFont = fam => S.fonts.some(f => f.family === fam && f.ok !== false);
+
+/* ---------- teams ---------- */
+const allTeams = () => S.teams;
+const teamById = id => S.teams.find(t => t.id === id) || null;
+function matchTeam(v){
+  const n = norm(v); if (!n) return null;
+  const t = allTeams().find(t => norm(t.name) === n || (t.tag && norm(t.tag) === n));
+  return t ? {id: t.id, name: t.name} : {name: v.trim()};
+}
+function teamOf(sel){ if (!sel) return null; if (sel.id) { const t = teamById(sel.id); if (t) return t; } return sel.name ? {name: sel.name} : null; }
+
+const allTemplates = () => S.templates;
+
+/* ---------- rendering ---------- */
+function resolveZone(z, data, opts){
+  const key = keyOf(z), p = {z};
+  if (z.type === 'text') { let v = data.values && data.values[key]; if ((v == null || v === '') && opts.preview) v = z.sample || z.field; p.text = v == null ? '' : String(v); }
+  else if (z.type === 'image') { p.imgRef = (data.images && data.images[key]) || null; if (!p.imgRef && opts.preview) p.placeholder = 'PICTURE'; }
+  else {
+    const team = teamOf(data.teams && data.teams[key]);
+    if (z.type === 'teamLogo') { p.imgRef = (team && team.logo) || null; if (!p.imgRef && opts.preview) p.placeholder = team ? 'NO LOGO' : 'LOGO'; }
+    else if (z.type === 'teamName') p.text = team ? team.name : (opts.preview ? z.field : '');
+    else p.text = team ? (team.tag || team.name) : (opts.preview ? 'TAG' : '');
+  }
+  return p;
+}
+function drawText(ctx, z, text){
+  if (!text) return;
+  const t = z.upper ? text.toUpperCase() : text;
+  const size0 = z.size || Math.round(z.h * .8);
+  let size = size0;
+  const f0 = z.font || 'Bebas Neue';
+  const fam = `"${f0}", "${FONT_FALLBACK[f0] || 'Bricolage Grotesque'}", sans-serif`;
+  const setF = s => { ctx.font = `${z.weight || 400} ${s}px ${fam}`; if ('letterSpacing' in ctx) ctx.letterSpacing = ((z.ls || 0) * s / size0) + 'px'; };
+  ctx.save();
+  setF(size);
+  let m = ctx.measureText(t), cap = ctx.measureText('H').actualBoundingBoxAscent || size * .7;
+  if (z.fit !== false) {
+    let guard = 0;
+    while ((m.width > z.w || cap > z.h) && size > 4 && guard++ < 80) {
+      size = Math.max(4, size * Math.min(.97, m.width > z.w ? z.w / m.width : .97));
+      setF(size); m = ctx.measureText(t); cap = ctx.measureText('H').actualBoundingBoxAscent || size * .7;
+    }
+  }
+  const al = z.align || 'center';
+  ctx.textAlign = al; ctx.textBaseline = 'alphabetic';
+  const x = al === 'left' ? z.x : al === 'right' ? z.x + z.w : z.x + z.w / 2;
+  const va = z.valign || 'middle';
+  const y = va === 'top' ? z.y + cap : va === 'bottom' ? z.y + z.h - (m.actualBoundingBoxDescent || 0) : z.y + z.h / 2 + cap / 2;
+  if (z.sw > 0) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = z.sw * 2 * size / size0; ctx.strokeStyle = z.sc || '#000'; ctx.strokeText(t, x, y); }
+  ctx.fillStyle = z.color || '#fff'; ctx.fillText(t, x, y);
+  ctx.restore();
+}
+function drawContain(ctx, z, im){
+  const iw = im.naturalWidth || im.width || 1, ih = im.naturalHeight || im.height || 1;
+  const s = Math.min(z.w / iw, z.h / ih), w = iw * s, h = ih * s;
+  ctx.drawImage(im, z.x + (z.w - w) / 2, z.y + (z.h - h) / 2, w, h);
+}
+function drawPlaceholder(ctx, z, label){
+  ctx.save(); const lw = Math.max(2, Math.min(z.w, z.h) / 60);
+  ctx.strokeStyle = 'rgba(95,212,255,.9)'; ctx.setLineDash([lw * 5, lw * 4]); ctx.lineWidth = lw;
+  const r = Math.max(4, Math.min(z.w, z.h) / 2 - lw);
+  ctx.beginPath(); ctx.arc(z.x + z.w / 2, z.y + z.h / 2, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = 'rgba(95,212,255,.95)'; ctx.font = `700 ${Math.max(10, r / 3)}px "Bricolage Grotesque", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, z.x + z.w / 2, z.y + z.h / 2); ctx.restore();
+}
+async function renderTo(cv, t, data, opts = {}){
+  const gen = (cv._gen = (cv._gen || 0) + 1);
+  const plan = t.zones.map(z => resolveZone(z, data, opts));
+  const jobs = [loadImage(t.image.ref)];
+  for (const p of plan) {
+    if (p.imgRef) jobs.push(loadImage(p.imgRef).then(im => { p.img = im; if (!im && opts.preview) p.placeholder = 'MISSING'; }));
+    if (p.text) jobs.push(ensureFont(p.z.font || 'Bebas Neue', p.z.weight || 400));
+  }
+  const res = await Promise.all(jobs);
+  if (cv._gen !== gen) return false;
+  const bg = res[0], W = t.image.w, H = t.image.h;
+  if (cv.width !== W) cv.width = W; if (cv.height !== H) cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  if (bg) ctx.drawImage(bg, 0, 0, W, H); else { ctx.fillStyle = '#1b2436'; ctx.fillRect(0, 0, W, H); }
+  for (const p of plan) {
+    if (p.img) drawContain(ctx, p.z, p.img);
+    else if (p.placeholder) drawPlaceholder(ctx, p.z, p.placeholder);
+    else if (p.text) drawText(ctx, p.z, p.text);
+  }
+  return true;
+}
+
+/* ---------- downloads ---------- */
+async function offerDownload(blob, filename){
+  if (S.downloads) {
+    try { await S.downloads.save({filename, data: blob}); toast('Saved ' + filename); return; }
+    catch (e) {
+      const c = e && e.code;
+      if (c === 'declined') return;
+      if (c === 'rate_limited') { toast('A save is already waiting for you to confirm. Try again in a moment.'); return; }
+    }
+  }
+  if (!window.claude) {
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000); toast('Downloaded ' + filename); return;
+  }
+  if (/\.zip$/i.test(filename)) { toast('Zip downloads are not available here. Press and hold each graphic below to save it.', true); return; }
+  const url = URL.createObjectURL(blob);
+  $('#modal-title').textContent = filename;
+  $('#modal-body').innerHTML = `<img src="${url}" alt="${esc(filename)}">`;
+  $('#modal').classList.remove('hidden');
+}
+function countMade(n){ try { localStorage.setItem('mds-made', String((+localStorage.getItem('mds-made') || 0) + n)); } catch (e) {} }
+const safeName = s => String(s || 'graphic').replace(/[\\/:*?"<>|#]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'graphic';
+
+/* ---------- views ---------- */
+function showView(v){
+  S.view = v;
+  ['templates','edit','fill','teams','fonts'].forEach(n => $('#view-' + n).classList.toggle('hidden', n !== v));
+  const tab = (v === 'edit' || v === 'fill') ? 'templates' : v;
+  $$('.tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
+  if (v === 'templates') renderTemplates();
+  if (v === 'teams') renderTeams();
+  if (v === 'fonts') renderFonts();
+  window.scrollTo(0, 0);
+}
+function route(){
+  const h = location.hash.slice(1);
+  showView(['teams','fonts'].includes(h) ? h : 'templates');
+}
+function setBadge(){
+  const b = $('#store-badge');
+  if (S.store.mode === 'cloud') { b.textContent = 'Saved online'; b.className = 'badge cloud'; b.title = 'Templates, teams and fonts are saved with this page, so they work on any device you open it on.'; }
+  else { b.textContent = 'Saved on this device'; b.className = 'badge local'; b.title = 'Your templates, teams and fonts are kept in this browser on this device. Nobody else can see them.'; }
+}
+
+/* ---------- templates list ---------- */
+function renderTemplates(){
+  const list = allTemplates();
+  $('#tpl-note').innerHTML = '';
+  if (!S.store) return;
+  const made = (() => { try { return +localStorage.getItem('mds-made') || 0; } catch (e) { return 0; } })();
+  $('#stats').innerHTML = [[S.templates.length, 'Templates'], [S.teams.length, 'Teams'], [S.templates.reduce((n, t) => n + t.zones.length, 0), 'Spots marked'], [made, 'Graphics made']].map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
+  if (!list.length) { $('#tpl-grid').innerHTML = `<div class="empty" style="grid-column:1/-1"><p class="kicker" style="margin-bottom:8px">No templates yet</p><p>Upload your finished results design to start. PNG at full size works best.</p><div class="row" style="justify-content:center;margin-top:14px"><label class="btn primary file-btn" for="tpl-upload2"><input type="file" id="tpl-upload2" accept="image/png,image/jpeg,image/webp">Upload your design</label></div></div>`; $('#tpl-upload2').addEventListener('change', e => { uploadTemplate(e.target.files[0]); e.target.value = ''; }); return; }
+  $('#tpl-grid').innerHTML = list.map(t => `
+    <article class="tcard" data-id="${esc(t.id)}">
+      <div class="thumb"><img alt="" data-ref="${esc(t.image.ref)}"></div>
+      <div class="tbody">
+        <div class="tname">${esc(t.name)} ${t.example ? '<span class="chip">Example</span>' : ''}</div>
+        <div class="meta">${t.zones.length} spot${t.zones.length === 1 ? '' : 's'} · ${t.image.w}×${t.image.h}${tableModel(t).rows.length ? ` · ${tableModel(t).rows.length} rows` : ''}</div>
+        <div class="row">
+          <button class="btn primary sm" data-act="open-fill" data-id="${esc(t.id)}">Fill in results</button>
+          <button class="btn sm" data-act="open-edit" data-id="${esc(t.id)}">Mark spots</button>
+          ${t.example ? '' : `<button class="btn sm ghost" data-act="dup-tpl" data-id="${esc(t.id)}">Duplicate</button>
+          <button class="btn sm ghost danger" data-confirm="del-tpl" data-id="${esc(t.id)}">Delete</button>`}
+        </div>
+      </div>
+    </article>`).join('');
+  $$('#tpl-grid img[data-ref]').forEach(async im => { const i = await loadImage(im.dataset.ref); if (i) im.src = imgSrc(i); });
+}
+const tplById = id => S.templates.find(t => t.id === id) || null;
+
+async function uploadTemplate(file){
+  if (!file) return;
+  try {
+    toast('Uploading design…');
+    const {w, h} = await imageSize(file);
+    const ref = await S.store.putBlob(file, file.type);
+    const t = {id: uid(), name: file.name.replace(/\.[^.]+$/, ''), image: {ref, w, h}, zones: [], createdAt: Date.now(), updatedAt: Date.now()};
+    await S.store.put('templates', t.id, t);
+    S.templates.unshift(t);
+    openEditor(t);
+    let found = false;
+    try { const im = await loadImage(ref); if (im) found = await runDetect(t, im, file, true); } catch (e) {}
+    if (!found) toast('Design uploaded. Tap Draw spot to mark where the results go.');
+  } catch (e) { toast('Upload failed: ' + errMsg(e) + '. Use a PNG, JPG or WebP under 20 MB.', true); }
+}
+
+/* ---------- editor ---------- */
+const zoneById = id => S.cur && S.cur.zones.find(z => z.id === id);
+const selZone = () => S.sel ? zoneById(S.sel) : null;
+const saveT = {}, saving = {};
+function setStatus(s){ $('#ed-status').textContent = s; }
+function queueSave(t){
+  if (t.example) { setStatus('Example: changes are not saved'); return; }
+  t.updatedAt = Date.now(); setStatus('Saving…');
+  clearTimeout(saveT[t.id]); saveT[t.id] = setTimeout(() => doSave(t), 800);
+}
+async function doSave(t){
+  if (saving[t.id]) { saving[t.id] = 'again'; return; }
+  saving[t.id] = true;
+  try { await S.store.put('templates', t.id, t); if (S.cur === t) setStatus('Saved'); }
+  catch (e) { if (S.cur === t) setStatus('Not saved'); toast('Could not save: ' + errMsg(e), true); }
+  const again = saving[t.id] === 'again'; saving[t.id] = false; if (again) doSave(t);
+}
+function openEditor(t){
+  S.cur = t; S.sel = null; S.drawMode = false; S.fit = true;
+  showView('edit');
+  $('#ed-name').value = t.name; $('#ed-name').disabled = !!t.example;
+  setStatus(t.example ? 'Example: changes are not saved' : 'Saved');
+  updateDrawBtn(); layoutStage(); renderBoxes(); renderPanel(); renderChips(); previewEditor(); updateRestoreBtn();
+}
+function layoutStage(){
+  const t = S.cur; if (!t) return;
+  const wrap = $('#ed-wrap'); const avail = Math.max(200, wrap.clientWidth - 2);
+  if (S.fit) S.scale = Math.min(1, avail / t.image.w);
+  const st = $('#ed-stage'); st.style.width = Math.round(t.image.w * S.scale) + 'px'; st.style.height = Math.round(t.image.h * S.scale) + 'px';
+  renderBoxes();
+}
+function boxLabel(z){ return `${TYPE_SHORT[z.type]}: ${z.field}${z.row ? ' #' + z.row : ''}`; }
+function renderBoxes(){
+  if (!S.cur) return;
+  const s = S.scale;
+  $('#ed-overlay').innerHTML = S.cur.zones.map(z => `<div class="box${z.id === S.sel ? ' sel' : ''}" data-id="${esc(z.id)}" style="left:${z.x*s}px;top:${z.y*s}px;width:${z.w*s}px;height:${z.h*s}px"><span class="lbl">${esc(boxLabel(z))}</span>${z.id === S.sel ? '<span class="handle" aria-hidden="true"></span>' : ''}</div>`).join('');
+}
+function placeBox(z){ const el = $(`#ed-overlay .box[data-id="${CSS.escape(z.id)}"]`); if (!el) return; const s = S.scale; Object.assign(el.style, {left: z.x*s + 'px', top: z.y*s + 'px', width: z.w*s + 'px', height: z.h*s + 'px'}); }
+function renderChips(){
+  if (!S.cur) return;
+  $('#ed-chips').innerHTML = S.cur.zones.map(z => `<button data-sel="${esc(z.id)}" class="${z.id === S.sel ? 'on' : ''}">${esc(boxLabel(z))}</button>`).join('');
+}
+function updateDrawBtn(){ const b = $('#draw-btn'); b.classList.toggle('on', S.drawMode); b.textContent = S.drawMode ? 'Drag over the design…' : '＋ Draw spot'; $('#ed-overlay').classList.toggle('drawing', S.drawMode); }
+function selectZone(id){ S.sel = id; renderBoxes(); renderPanel(); renderChips(); }
+const previewEditor = debounce(() => { if (S.cur && S.view === 'edit') renderTo($('#ed-canvas'), S.cur, {values:{}, teams:{}, images:{}}, {preview: true}); }, 60);
+function fieldNames(){ return [...new Set((S.cur ? S.cur.zones : []).map(z => z.field).filter(Boolean))]; }
+function nextField(type){
+  const used = new Set(S.cur.zones.map(z => z.field));
+  if (isTeamType(type)) { for (const n of ['Team A','Team B']) if (!S.cur.zones.some(z => z.field === n && z.type === type)) return n; }
+  let i = 1; while (used.has('Text ' + i)) i++; return 'Text ' + i;
+}
+function newZone(x, y, w, h){
+  const t = S.cur;
+  const z = {id: uid(), type: 'text', field: '', row: 0, x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h), font: 'Bebas Neue', weight: 400, size: Math.round(h * .8), fit: true, color: '#ffffff', align: 'center', valign: 'middle', upper: false, ls: 0, sw: 0, sc: '#000000', sample: ''};
+  z.field = nextField('text');
+  t.zones.push(z); selectZone(z.id); previewEditor(); queueSave(t);
+}
+function renderPanel(){
+  const z = selZone(), el = $('#ed-panel');
+  if (!z) {
+    el.innerHTML = `<div class="card"><h3>Mark the spots</h3>
+      <p class="help">Tap <b>Draw spot</b>, then drag over each area where something changes: a team name, a logo, a score, kills, points. Tap a spot to choose what goes there and how it looks. Drag a spot to move it; drag the round handle to resize.</p>
+      <p class="help">Spots with the same <b>name</b> share one entry. Use <b>Team A</b> and <b>Team B</b> for the logo and name spots of each side, so picking a team fills both.</p>
+      <p class="help">${S.cur.zones.length} spot${S.cur.zones.length === 1 ? '' : 's'} marked.</p></div>`;
+    return;
+  }
+  const isText = z.type === 'text' || z.type === 'teamName' || z.type === 'teamTag';
+  const fonts = allFontNames(); if (z.font && !fonts.includes(z.font)) fonts.unshift(z.font);
+  el.innerHTML = `<div class="card">
+    <div class="row" style="justify-content:space-between"><h3>Spot</h3><div class="row"><button class="btn sm" data-act="dup-zone">Duplicate</button><button class="btn sm danger" data-act="del-zone">Delete</button></div></div>
+    <div class="field"><label for="z-type">What goes here</label><select id="z-type" data-k="type">${Object.keys(TYPE_LABEL).map(k => `<option value="${k}" ${z.type === k ? 'selected' : ''}>${TYPE_LABEL[k]}</option>`).join('')}</select></div>
+    <div class="grid2">
+      <div class="field"><label for="z-field">Name</label><input id="z-field" data-k="field" list="field-names" value="${esc(z.field)}"><datalist id="field-names">${['Team A','Team B','Score A','Score B','Team','Kills','Points','Placement','Total','MVP','Stage','Date', ...fieldNames()].filter((v, i, a) => a.indexOf(v) === i).map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
+      <div class="field"><label for="z-row">Row (tables only)</label><input id="z-row" type="number" min="0" data-k="row" value="${z.row || 0}"></div>
+    </div>
+    <p class="help">${isTeamType(z.type) ? 'Logo, name and tag spots with the same name and row all follow one team picker.' : 'Leave Row at 0 unless this spot is part of a standings table (1, 2, 3…).'}</p>
+    ${isText ? `
+    ${z.type === 'text' ? `<div class="field"><label for="z-sample">Sample text for this preview</label><input id="z-sample" data-k="sample" value="${esc(z.sample || '')}" placeholder="${esc(z.field)}"></div>` : ''}
+    <div class="grid2">
+      <div class="field"><label for="z-font">Font</label><select id="z-font" data-k="font">${fonts.map(f => `<option ${f === z.font ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></div>
+      <div class="field"><label for="z-weight">Weight</label><select id="z-weight" data-k="weight">${[300,400,500,600,700,800,900].map(w => `<option value="${w}" ${Number(z.weight) === w ? 'selected' : ''}>${w}</option>`).join('')}</select></div>
+      <div class="field"><label for="z-size">Size (px)</label><input id="z-size" type="number" min="4" data-k="size" value="${z.size}"></div>
+      <div class="field"><label for="z-color">Colour</label><div class="row" style="flex-wrap:nowrap"><input type="color" id="z-color" data-k="color" value="${esc(z.color)}" aria-label="Colour picker"><input id="z-colorhex" data-k="color" value="${esc(z.color)}" aria-label="Colour code"></div></div>
+    </div>
+    <div class="field"><span class="lab">Align</span><div class="seg">${['left','center','right'].map(a => `<button data-set="align:${a}" class="${z.align === a ? 'on' : ''}">${a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</div></div>
+    <div class="field"><span class="lab">Vertical</span><div class="seg">${['top','middle','bottom'].map(a => `<button data-set="valign:${a}" class="${z.valign === a ? 'on' : ''}">${a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</div></div>
+    <div class="row"><label class="check"><input type="checkbox" data-k="fit" ${z.fit !== false ? 'checked' : ''}> Shrink long text to fit</label><label class="check"><input type="checkbox" data-k="upper" ${z.upper ? 'checked' : ''}> CAPITALS</label></div>
+    <div class="grid2">
+      <div class="field"><label for="z-ls">Letter spacing (px)</label><input id="z-ls" type="number" step="0.5" data-k="ls" value="${z.ls || 0}"></div>
+      <div class="field"><label for="z-sw">Outline (px)</label><div class="row" style="flex-wrap:nowrap"><input id="z-sw" type="number" min="0" data-k="sw" value="${z.sw || 0}"><input type="color" data-k="sc" value="${esc(z.sc || '#000000')}" aria-label="Outline colour"></div></div>
+    </div>` : `<p class="help">The ${z.type === 'teamLogo' ? 'logo' : 'picture'} is fitted inside the box and centred, keeping its shape.</p>`}
+    <div class="grid4">
+      ${['x','y','w','h'].map(k => `<div class="field"><label for="z-${k}">${{x:'Left', y:'Top', w:'Width', h:'Height'}[k]}</label><input id="z-${k}" type="number" data-k="${k}" value="${Math.round(z[k])}"></div>`).join('')}
+    </div>
+    <div class="arrows"><button class="btn sm" data-act="nudge" data-d="-1,0" aria-label="Move left">←</button><button class="btn sm" data-act="nudge" data-d="0,-1" aria-label="Move up">↑</button><button class="btn sm" data-act="nudge" data-d="0,1" aria-label="Move down">↓</button><button class="btn sm" data-act="nudge" data-d="1,0" aria-label="Move right">→</button></div>
+    <button class="btn ghost" data-act="deselect">Done with this spot</button>
+  </div>`;
+}
+const NUM_KEYS = ['x','y','w','h','size','row','ls','sw','weight'];
+function onPanelInput(e){
+  const k = e.target.dataset.k, z = selZone(); if (!k || !z) return;
+  let v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  if (NUM_KEYS.includes(k)) { v = Number(v); if (!isFinite(v)) return; if (k === 'w' || k === 'h') v = Math.max(4, v); if (k === 'row') v = Math.max(0, Math.round(v)); }
+  if (k === 'color' || k === 'sc') { if (!/^#[0-9a-fA-F]{6}$/.test(v)) return; $$(`#ed-panel [data-k="${k}"]`).forEach(i => { if (i !== e.target) i.value = v; }); }
+  if (k === 'h' && z.type !== 'teamLogo' && z.type !== 'image' && z.size > v) { /* keep size, fit handles it */ }
+  z[k] = v;
+  if (k === 'type') { if (isTeamType(v) && !isTeamType(z.prevType || 'text') && /^Text \d+$/.test(z.field)) z.field = nextField(v); z.prevType = v; renderPanel(); }
+  if (k === 'type' || k === 'field' || k === 'row') { renderChips(); }
+  renderBoxes(); previewEditor(); queueSave(S.cur);
+}
+function repeatRows(){
+  const t = S.cur; const r = Math.max(1, +$('#rep-row').value || 1), n = clamp(+$('#rep-count').value || 0, 1, 60), dy = +$('#rep-dy').value || 0, dx = +$('#rep-dx').value || 0;
+  const src = t.zones.filter(z => (z.row || 0) === r);
+  if (!src.length) { toast(`No spots are in row ${r} yet. Select each spot of your first table row and set its Row to ${r}.`, true); return; }
+  t.zones = t.zones.filter(z => !((z.row || 0) > r && (z.row || 0) <= r + n));
+  for (let i = 1; i <= n; i++) for (const z of src) t.zones.push(Object.assign({}, z, {id: uid(), row: r + i, x: z.x + dx * i, y: z.y + dy * i}));
+  S.sel = null; renderBoxes(); renderPanel(); renderChips(); previewEditor(); queueSave(t);
+  toast(`Made rows ${r + 1} to ${r + n}.`);
+}
+function primeRepeat(){
+  const t = S.cur; if (!t) return; const r = Math.max(1, +$('#rep-row').value || 1);
+  const src = t.zones.filter(z => (z.row || 0) === r);
+  if (src.length) { const top = Math.min(...src.map(z => z.y)), bot = Math.max(...src.map(z => z.y + z.h)); $('#rep-dy').value = Math.round(bot - top + 8); }
+}
+async function replaceImage(file){
+  const t = S.cur; if (!file || !t) return;
+  if (t.example) { toast('Upload your own design from Templates instead.'); return; }
+  try {
+    toast('Uploading new design…');
+    const {w, h} = await imageSize(file); const ref = await S.store.putBlob(file, file.type);
+    const sx = w / t.image.w, sy = h / t.image.h;
+    if (sx !== 1 || sy !== 1) t.zones.forEach(z => { z.x = Math.round(z.x * sx); z.y = Math.round(z.y * sy); z.w = Math.round(z.w * sx); z.h = Math.round(z.h * sy); z.size = Math.round((z.size || 0) * sy); });
+    const old = t.image.ref; t.image = {ref, w, h};
+    await doSave(t);
+    if (!S.templates.some(o => o !== t && o.image.ref === old)) S.store.delBlob(old);
+    S.fit = true; layoutStage(); previewEditor(); toast('Design replaced. Your spots were kept.');
+  } catch (e) { toast('Could not replace the design: ' + errMsg(e), true); }
+}
+
+/* pointer handling on the stage */
+let drag = null, lastDragEnd = 0;
+function imgPt(e){ const r = $('#ed-stage').getBoundingClientRect(); return {x: (e.clientX - r.left) / S.scale, y: (e.clientY - r.top) / S.scale}; }
+function wireStage(){
+  const ov = $('#ed-overlay');
+  ov.addEventListener('pointerdown', e => {
+    if (!S.cur) return;
+    const p = imgPt(e), handle = e.target.closest('.handle'), box = e.target.closest('.box');
+    if (handle && box) { const z = zoneById(box.dataset.id); drag = {mode: 'resize', z, p0: p, o: Object.assign({}, z)}; }
+    else if (box && !S.drawMode) { if (S.sel !== box.dataset.id) selectZone(box.dataset.id); const z = zoneById(box.dataset.id); drag = {mode: 'move', z, p0: p, o: Object.assign({}, z)}; }
+    else if (S.drawMode) { const g = document.createElement('div'); g.className = 'box ghost'; ov.appendChild(g); drag = {mode: 'draw', p0: p, g}; }
+    else return;
+    e.preventDefault(); try { ov.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  ov.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const p = imgPt(e), W = S.cur.image.w, H = S.cur.image.h, dx = p.x - drag.p0.x, dy = p.y - drag.p0.y;
+    if (drag.mode === 'move') { const z = drag.z; z.x = Math.round(clamp(drag.o.x + dx, -z.w / 2, W - z.w / 2)); z.y = Math.round(clamp(drag.o.y + dy, -z.h / 2, H - z.h / 2)); placeBox(z); drag.moved = true; }
+    else if (drag.mode === 'resize') { const z = drag.z; z.w = Math.round(clamp(drag.o.w + dx, 6, W * 2)); z.h = Math.round(clamp(drag.o.h + dy, 6, H * 2)); placeBox(z); drag.moved = true; }
+    else { const x1 = clamp(Math.min(drag.p0.x, p.x), 0, W), y1 = clamp(Math.min(drag.p0.y, p.y), 0, H), x2 = clamp(Math.max(drag.p0.x, p.x), 0, W), y2 = clamp(Math.max(drag.p0.y, p.y), 0, H); drag.r = {x: x1, y: y1, w: x2 - x1, h: y2 - y1}; const s = S.scale; Object.assign(drag.g.style, {left: x1*s + 'px', top: y1*s + 'px', width: (x2-x1)*s + 'px', height: (y2-y1)*s + 'px'}); }
+  });
+  const end = () => {
+    if (!drag) return; const d = drag; drag = null; lastDragEnd = Date.now();
+    if (d.mode === 'draw') {
+      d.g.remove(); S.drawMode = false; updateDrawBtn();
+      const W = S.cur.image.w;
+      if (d.r && d.r.w * S.scale > 12 && d.r.h * S.scale > 12) newZone(d.r.x, d.r.y, d.r.w, d.r.h);
+      else { const w = W * .25, h = W * .07; newZone(clamp(d.p0.x - w / 2, 0, W - w), Math.max(0, d.p0.y - h / 2), w, h); }
+    } else if (d.moved) { renderPanel(); previewEditor(); queueSave(S.cur); }
+  };
+  ov.addEventListener('pointerup', end); ov.addEventListener('pointercancel', end);
+  ov.addEventListener('click', e => { if (e.target === ov && !S.drawMode && S.sel && Date.now() - lastDragEnd > 400) selectZone(null); });
+  $('#ed-panel').addEventListener('input', onPanelInput);
+  $('#ed-panel').addEventListener('change', e => { if (e.target.tagName === 'SELECT') return; });
+  $('#ed-panel').addEventListener('click', e => {
+    const b = e.target.closest('[data-set]'); if (!b) return;
+    const [k, v] = b.dataset.set.split(':'); const z = selZone(); if (!z) return;
+    z[k] = v; renderPanel(); previewEditor(); queueSave(S.cur);
+  });
+  $('#ed-chips').addEventListener('click', e => { const b = e.target.closest('[data-sel]'); if (b) selectZone(b.dataset.sel); });
+  $('#ed-name').addEventListener('input', e => { if (!S.cur || S.cur.example) return; S.cur.name = e.target.value || 'Untitled template'; queueSave(S.cur); });
+  $('#repeat').addEventListener('toggle', primeRepeat);
+  $('#rep-row').addEventListener('change', primeRepeat);
+  document.addEventListener('keydown', e => {
+    if (S.view !== 'edit' || !selZone() || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+    const z = selZone(), st = e.shiftKey ? 10 : 1;
+    const mv = {ArrowLeft: [-st, 0], ArrowRight: [st, 0], ArrowUp: [0, -st], ArrowDown: [0, st]}[e.key];
+    if (mv) { e.preventDefault(); z.x += mv[0]; z.y += mv[1]; placeBox(z); renderPanel(); previewEditor(); queueSave(S.cur); }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); act('del-zone'); }
+  });
+  window.addEventListener('resize', debounce(() => { if (S.view === 'edit') layoutStage(); }, 150));
+}
+
+/* ---------- fill ---------- */
+function fieldsOf(t){
+  const map = new Map();
+  for (const z of t.zones) {
+    const key = keyOf(z); let f = map.get(key);
+    if (!f) { f = {key, field: z.field, row: z.row || 0, kind: null}; map.set(key, f); }
+    const k = isTeamType(z.type) ? 'team' : z.type === 'image' ? 'image' : 'text';
+    if (!f.kind || k === 'team') f.kind = k;
+  }
+  return [...map.values()];
+}
+function tableModel(t){
+  const rowF = fieldsOf(t).filter(f => f.row);
+  const rows = [...new Set(rowF.map(f => f.row))].sort((a, b) => a - b);
+  const cols = [];
+  for (const f of rowF) { let c = cols.find(c => c.field === f.field); if (!c) { c = {field: f.field, kind: f.kind}; cols.push(c); } else if (f.kind === 'team') c.kind = 'team'; }
+  return {rows, cols, has: new Set(rowF.map(f => f.key))};
+}
+const fillKey = t => 'mds-fill-' + t.id;
+function loadFill(t){
+  try { const v = JSON.parse(localStorage.getItem(fillKey(t)) || 'null'); if (v) return {values: v.values || {}, teams: v.teams || {}, images: {}}; } catch (e) {}
+  return {values: {}, teams: {}, images: {}};
+}
+const saveFill = debounce(() => { const t = S.cur; if (!t || t.example) return; try { localStorage.setItem(fillKey(t), JSON.stringify({values: S.fill.values, teams: S.fill.teams})); } catch (e) {} }, 500);
+const previewFill = debounce(() => { if (S.cur && S.view === 'fill') renderTo($('#fill-canvas'), S.cur, S.fill, {}); }, 80);
+function openFill(t){
+  S.cur = t; S.fill = loadFill(t); S.batch = []; applyCalc(t, S.fill);
+  showView('fill');
+  $('#fill-title').textContent = t.name;
+  $('#fill-size').textContent = `${t.image.w}×${t.image.h}px`;
+  renderFillForm(); previewFill();
+}
+function teamSelect(key, id){
+  const cur = S.fill.teams[key];
+  const teams = [...allTeams()].sort((a, b) => a.name.localeCompare(b.name));
+  const custom = (cur && cur.name && !(cur.id && teamById(cur.id))) ? `<option value="__custom" selected>${esc(cur.name)} (no logo)</option>` : '';
+  return `<select ${id ? `id="${id}"` : ''} data-team="${esc(key)}" aria-label="${esc(key.split('|')[0])}"><option value="">Choose team…</option>${custom}${teams.map(t => `<option value="${esc(t.id)}" ${cur && cur.id === t.id ? 'selected' : ''}>${esc(t.name)}${t.tag ? ' · ' + esc(t.tag) : ''}</option>`).join('')}</select>`;
+}
+function fieldInput(f){
+  const id = 'f-' + idSafe(f.key), label = esc(f.row ? `${f.field} ${f.row}` : f.field);
+  if (f.kind === 'team') return `<div class="field"><label for="${id}">${label}</label>${teamSelect(f.key, id)}</div>`;
+  if (f.kind === 'image') return `<div class="field"><label for="${id}">${label}</label><input type="file" accept="image/*" id="${id}" data-img="${esc(f.key)}"></div>`;
+  return `<div class="field"><label for="${id}">${label}</label><input id="${id}" data-val="${esc(f.key)}" value="${esc(S.fill.values[f.key] ?? '')}" autocomplete="off"></div>`;
+}
+function batchHeaders(t){ return fieldsOf(t).filter(f => f.kind !== 'image').map(f => ({key: f.key, label: f.row ? `${f.field} ${f.row}` : f.field, kind: f.kind})); }
+function renderFillForm(){
+  const t = S.cur, F = fieldsOf(t), gen = F.filter(f => !f.row), tm = tableModel(t);
+  let html = '';
+  if (!t.zones.length) html += `<div class="empty">No spots marked on this template yet.<br><br><button class="btn primary" data-act="to-edit">Mark spots</button></div>`;
+  if (gen.length) html += `<section class="card"><h3>Details</h3><div class="gridf">${gen.map(fieldInput).join('')}</div>${S.teams.length ? '' : '<p class="help">No teams saved yet. Add them in the Teams tab to pick them here with their logos. Imported or pasted names still work without logos.</p>'}</section>`;
+  if (tm.rows.length) html += importCard(t);
+  if (tm.rows.length) {
+    const textCols = tm.cols.filter(c => c.kind === 'text');
+    html += `<section class="card"><h3>Table</h3>
+      <div class="tablewrap"><table><thead><tr><th>#</th>${tm.cols.map(c => `<th>${esc(c.field)}</th>`).join('')}</tr></thead><tbody>
+      ${tm.rows.map(r => `<tr><td class="n">${r}</td>${tm.cols.map(c => { const k = c.field + '|' + r; if (!tm.has.has(k)) return '<td class="muted">–</td>';
+        if (c.kind === 'team') return `<td>${teamSelect(k)}</td>`;
+        if (c.kind === 'image') return `<td><input type="file" accept="image/*" data-img="${esc(k)}" aria-label="${esc(c.field + ' ' + r)}"></td>`;
+        const auto = t.calc && t.calc.target === c.field;
+        return `<td><input data-val="${esc(k)}" value="${esc(S.fill.values[k] ?? '')}" ${auto ? 'readonly title="Worked out automatically" style="opacity:.8"' : ''} aria-label="${esc(c.field + ' ' + r)}" inputmode="${/kill|point|pts|score|total|place|rank|#/i.test(c.field) ? 'decimal' : 'text'}"></td>`; }).join('')}</tr>`).join('')}
+      </tbody></table></div>
+      ${textCols.length ? `<div class="row"><select id="sort-col" aria-label="Sort column" style="width:auto">${textCols.map(c => `<option ${t.calc && t.calc.target === c.field ? 'selected' : ''}>${esc(c.field)}</option>`).join('')}</select><button class="btn sm" data-act="sort-rows">Sort high to low</button></div>` : ''}
+      ${textCols.length > 1 ? `<details ${t.calc ? 'open' : ''}><summary class="lab" style="cursor:pointer">Auto total ${t.calc ? `· on: ${esc(t.calc.target)} = ${esc(t.calc.from.join(' + '))}` : '· off'}</summary>
+        <div class="form" style="gap:8px;margin-top:8px">
+          <div class="row"><label class="lab" for="calc-target">Column to fill</label><select id="calc-target" style="width:auto">${textCols.map(c => `<option ${(t.calc ? t.calc.target === c.field : /total/i.test(c.field)) ? 'selected' : ''}>${esc(c.field)}</option>`).join('')}</select></div>
+          <div class="row" id="calc-from"><span class="lab">Add up</span>${textCols.map(c => `<label class="check"><input type="checkbox" value="${esc(c.field)}" ${t.calc && t.calc.from.includes(c.field) ? 'checked' : ''}> ${esc(c.field)}</label>`).join('')}</div>
+          <div class="row"><button class="btn sm primary" data-act="calc-toggle" data-on="1">${t.calc ? 'Update' : 'Turn on'}</button>${t.calc ? '<button class="btn sm ghost" data-act="calc-toggle" data-on="0">Turn off</button>' : ''}</div>
+        </div></details>` : ''}
+      <details><summary class="lab" style="cursor:pointer">Paste a table instead</summary>
+        <p class="help" style="margin:8px 0">Copy rows from a spreadsheet, or type one row per line with commas between columns. Start with a line of column names (${esc(tm.cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}) or keep the column order above. Team names or tags are matched to your Teams.</p>
+        <textarea id="paste-rows" placeholder="${esc(tm.cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}"></textarea>
+        <div class="row" style="margin-top:8px"><button class="btn primary sm" data-act="paste-rows">Fill the table</button></div>
+      </details></section>`;
+  }
+  if (t.zones.length) {
+    const hd = batchHeaders(t).map(h => h.label);
+    html += `<details class="card" id="batch"><summary>Many graphics at once</summary>
+      <p class="help">One line per graphic, for a whole match day in one go. The first line must be the column names below. Anything you leave out uses what's filled in above.</p>
+      <div class="row"><code style="overflow-wrap:anywhere">${esc(hd.join(', '))}</code><button class="btn sm" data-act="copy-headers">Copy</button></div>
+      <textarea id="batch-in" placeholder="${esc(hd.join(', '))}"></textarea>
+      <div class="row"><button class="btn primary" data-act="batch-make">Make graphics</button><button class="btn hidden" data-act="batch-zip" id="zip-btn">Download all (.zip)</button><span class="muted small" id="batch-msg"></span></div>
+      <div class="bout" id="batch-out"></div></details>`;
+  }
+  $('#fill-form').innerHTML = html;
+}
+function onFillChange(){
+  const t = S.cur;
+  if (t && t.calc) { applyCalc(t, S.fill); $$('#fill-form input[data-val]').forEach(i => { const k = i.dataset.val; if (k.split('|')[0] === t.calc.target && i.value !== (S.fill.values[k] ?? '')) i.value = S.fill.values[k] ?? ''; }); }
+  previewFill(); saveFill();
+}
+function wireFill(){
+  const f = $('#fill-form');
+  f.addEventListener('input', e => { const k = e.target.dataset.val; if (k == null) return; S.fill.values[k] = e.target.value; onFillChange(); });
+  f.addEventListener('change', e => {
+    const tk = e.target.dataset.team, ik = e.target.dataset.img;
+    if (tk != null) { const v = e.target.value; if (!v) delete S.fill.teams[tk]; else if (v !== '__custom') { const t = teamById(v); S.fill.teams[tk] = {id: v, name: t ? t.name : ''}; } onFillChange(); }
+    if (e.target.id === 'imp-file') { importFiles(e.target.files); e.target.value = ''; return; }
+    if (e.target.id === 'sc-preset') { const p = PLACEMENT_PRESETS.find(x => x.id === e.target.value); if (p) $('#sc-pts').value = p.pts.join(', '); return; }
+    if (ik != null) { const file = e.target.files[0]; if (!file) return; const im = new Image(); im.src = URL.createObjectURL(file); im.decode().then(() => { const ref = 'tmp:' + uid(); MEM.set(ref, im); S.fill.images[ik] = ref; onFillChange(); }).catch(() => toast('That picture could not be read.', true)); }
+  });
+}
+function parseTable(text){
+  const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim());
+  if (!lines.length) return [];
+  const tab = lines.some(l => l.includes('\t')), semi = !tab && !lines[0].includes(',') && lines[0].includes(';');
+  const sep = tab ? '\t' : semi ? ';' : ',';
+  return lines.map(l => { const out = []; let cur = '', q = false; for (let i = 0; i < l.length; i++) { const c = l[i]; if (q) { if (c === '"' && l[i+1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; } else if (c === '"') q = true; else if (c === sep) { out.push(cur.trim()); cur = ''; } else cur += c; } out.push(cur.trim()); return out; });
+}
+function pasteRows(){
+  const t = S.cur, tm = tableModel(t), grid = parseTable($('#paste-rows').value);
+  if (!grid.length) { toast('Paste some rows first.'); return; }
+  const cols = tm.cols.filter(c => c.kind !== 'image'), cn = cols.map(c => norm(c.field));
+  const hdr = grid[0].map(norm), hits = hdr.filter(h => cn.includes(h)).length;
+  let mapping = cols, data = grid;
+  if (hits) { mapping = hdr.map(h => cols[cn.indexOf(h)] || null); data = grid.slice(1); }
+  const missing = new Set();
+  data.forEach((cells, i) => {
+    const r = tm.rows[i]; if (r == null) return;
+    cells.forEach((v, ci) => { const c = mapping[ci]; if (!c) return; const k = c.field + '|' + r;
+      if (c.kind === 'team') { const m = matchTeam(v); if (m) { S.fill.teams[k] = m; if (!m.id) missing.add(v); } else delete S.fill.teams[k]; }
+      else S.fill.values[k] = v; });
+  });
+  applyCalc(t, S.fill); renderFillForm(); onFillChange();
+  const notes = [];
+  if (data.length > tm.rows.length) notes.push(`This template has ${tm.rows.length} rows, so ${data.length - tm.rows.length} extra line(s) were skipped.`);
+  if (missing.size) notes.push(`No saved team for: ${[...missing].join(', ')}. Their names show without a logo.`);
+  toast(notes.join(' ') || `Filled ${Math.min(data.length, tm.rows.length)} rows.`, !!missing.size);
+}
+function sortRows(){
+  const t = S.cur, tm = tableModel(t), field = $('#sort-col').value; applyCalc(t, S.fill);
+  const num = v => { const n = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, '')); return isFinite(n) ? n : -Infinity; };
+  const recs = tm.rows.map(r => { const rec = {}; tm.cols.forEach(c => { const k = c.field + '|' + r; rec[c.field] = {v: S.fill.values[k], t: S.fill.teams[k], im: S.fill.images[k]}; }); return rec; });
+  recs.sort((a, b) => { const x = num(a[field].v), y = num(b[field].v); return x === y ? 0 : y > x ? 1 : -1; });
+  const set = (o, k, v) => { if (v === undefined) delete o[k]; else o[k] = v; };
+  tm.rows.forEach((r, i) => tm.cols.forEach(c => { const k = c.field + '|' + r, x = recs[i][c.field]; set(S.fill.values, k, x.v); set(S.fill.teams, k, x.t); set(S.fill.images, k, x.im); }));
+  renderFillForm(); onFillChange(); toast(`Sorted by ${field}, highest first.`);
+}
+function fileBase(t, data){
+  const names = fieldsOf(t).filter(f => f.kind === 'team' && !f.row).map(f => { const tm = teamOf(data.teams[f.key]); return tm && (tm.tag || tm.name); }).filter(Boolean);
+  return safeName(names.length >= 2 ? `${t.name} - ${names.slice(0, 2).join(' vs ')}` : t.name);
+}
+async function downloadOne(){
+  const t = S.cur, btn = $('#dl-btn'); btn.disabled = true;
+  try { const cv = document.createElement('canvas'); await renderTo(cv, t, S.fill, {}); const blob = await canvasBlob(cv); await offerDownload(blob, fileBase(t, S.fill) + '.png'); countMade(1); }
+  catch (e) { toast('Could not make the image: ' + errMsg(e), true); }
+  finally { btn.disabled = false; }
+}
+async function batchMake(){
+  const t = S.cur, grid = parseTable($('#batch-in').value);
+  if (grid.length < 2) { toast('Add the column names line, then one line per graphic.', true); return; }
+  const hd = batchHeaders(t), map = grid[0].map(h => hd.find(x => norm(x.label) === norm(h)) || null);
+  if (!map.some(Boolean)) { toast('The first line must use the column names shown above.', true); return; }
+  S.batch.forEach(b => URL.revokeObjectURL(b.url)); S.batch = [];
+  const out = $('#batch-out'); out.innerHTML = ''; $('#zip-btn').classList.add('hidden');
+  const missing = new Set(), used = {};
+  for (let i = 1; i < grid.length; i++) {
+    $('#batch-msg').textContent = `Making ${i} of ${grid.length - 1}…`;
+    const d = {values: Object.assign({}, S.fill.values), teams: JSON.parse(JSON.stringify(S.fill.teams)), images: Object.assign({}, S.fill.images)};
+    grid[i].forEach((v, ci) => { const h = map[ci]; if (!h) return; if (h.kind === 'team') { const m = matchTeam(v); if (m) { d.teams[h.key] = m; if (!m.id) missing.add(v); } else delete d.teams[h.key]; } else d.values[h.key] = v; });
+    applyCalc(t, d);
+    const cv = document.createElement('canvas'); await renderTo(cv, t, d, {});
+    let name = fileBase(t, d); used[name] = (used[name] || 0) + 1; if (used[name] > 1) name += ' (' + used[name] + ')';
+    const blob = await canvasBlob(cv), url = URL.createObjectURL(blob);
+    S.batch.push({name: name + '.png', blob, url});
+    const fig = document.createElement('figure'); const n = S.batch.length - 1;
+    fig.innerHTML = `<img src="${url}" alt="${esc(name)}"><figcaption>${esc(name)}</figcaption><button class="btn sm" data-act="batch-one" data-i="${n}">Download</button>`;
+    out.appendChild(fig);
+  }
+  countMade(S.batch.length);
+  $('#batch-msg').textContent = `${S.batch.length} graphic${S.batch.length === 1 ? '' : 's'} ready.` + (missing.size ? ` No saved team for: ${[...missing].join(', ')}.` : '');
+  if (S.batch.length > 1 && window.JSZip) $('#zip-btn').classList.remove('hidden');
+}
+async function batchZip(){
+  const zip = new JSZip(); S.batch.forEach(b => zip.file(b.name, b.blob));
+  try { const blob = await zip.generateAsync({type: 'blob'}); await offerDownload(blob, safeName(S.cur.name + ' results') + '.zip'); }
+  catch (e) { toast('Could not build the zip: ' + errMsg(e), true); }
+}
+
+
+/* ---------- table detection (dash placeholders) ---------- */
+function detectTable(img){
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const cx = cv.getContext('2d', {willReadFrequently: true}); cx.drawImage(img, 0, 0, W, H);
+  const d = cx.getImageData(0, 0, W, H).data, N = W * H;
+  const lum = new Float32Array(N);
+  for (let i = 0; i < N; i++) lum[i] = .299 * d[i*4] + .587 * d[i*4+1] + .114 * d[i*4+2];
+  const W1 = W + 1, I = new Float64Array(W1 * (H + 1));
+  for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += lum[y*W+x]; I[(y+1)*W1 + x+1] = I[y*W1 + x+1] + row; } }
+  const r = Math.max(8, Math.round(Math.min(W, H) / 110)), mask = new Uint8Array(N);
+  for (let y = 0; y < H; y++) {
+    const y0 = Math.max(0, y - r), y1 = Math.min(H, y + r + 1);
+    for (let x = 0; x < W; x++) {
+      const x0 = Math.max(0, x - r), x1 = Math.min(W, x + r + 1);
+      const m = (I[y1*W1+x1] - I[y0*W1+x1] - I[y1*W1+x0] + I[y0*W1+x0]) / ((y1-y0) * (x1-x0));
+      if (Math.abs(lum[y*W+x] - m) > 40) mask[y*W+x] = 1;
+    }
+  }
+  const seen = new Uint8Array(N), stack = new Int32Array(N), dashes = [];
+  for (let i = 0; i < N; i++) {
+    if (!mask[i] || seen[i]) continue;
+    let sp = 0, cnt = 0, minx = W, maxx = 0, miny = H, maxy = 0, rs = 0, gs = 0, bs = 0, big = false;
+    stack[sp++] = i; seen[i] = 1;
+    while (sp) {
+      const p = stack[--sp], x = p % W, y = (p - x) / W; cnt++;
+      if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y;
+      rs += d[p*4]; gs += d[p*4+1]; bs += d[p*4+2];
+      if (maxx - minx > W * .06 || maxy - miny > H * .02) big = true;
+      const nb = [p - 1, p + 1, p - W, p + W];
+      for (let k = 0; k < 4; k++) { const q = nb[k]; if (q < 0 || q >= N || seen[q] || !mask[q]) continue; if (k < 2 && Math.abs((q % W) - x) !== 1) continue; seen[q] = 1; stack[sp++] = q; }
+    }
+    if (big) continue;
+    const w = maxx - minx + 1, h = maxy - miny + 1;
+    if (h < 2 || h > H * .012 || w < H * .004 || w > W * .05 || w / h < 2.2 || cnt / (w * h) < .8) continue;
+    if (minx === 0 || miny === 0 || maxx === W - 1 || maxy === H - 1) continue;
+    dashes.push({x: minx, y: miny, w, h, cx: minx + w / 2, cy: miny + h / 2, rgb: [rs / cnt, gs / cnt, bs / cnt]});
+  }
+  if (dashes.length < 4) return null;
+  // rows
+  const byY = [...dashes].sort((a, b) => a.cy - b.cy), rows = [], ty = Math.max(4, H * .006);
+  for (const ds of byY) { const g = rows[rows.length - 1]; if (g && Math.abs(ds.cy - g.cy) <= ty) { g.items.push(ds); g.cy = g.items.reduce((s, x) => s + x.cy, 0) / g.items.length; } else rows.push({cy: ds.cy, items: [ds]}); }
+  // columns
+  const byX = [...dashes].sort((a, b) => a.cx - b.cx), cols = [], tx = W * .012;
+  for (const ds of byX) { const g = cols[cols.length - 1]; if (g && Math.abs(ds.cx - g.cx) <= tx) { g.items.push(ds); g.cx = g.items.reduce((s, x) => s + x.cx, 0) / g.items.length; } else cols.push({cx: ds.cx, items: [ds]}); }
+  const goodRows0 = rows.filter(g => g.items.length >= 2);
+  const kc = cols.filter(c => c.items.length >= Math.max(2, Math.ceil(goodRows0.length * .5)));
+  if (!kc.length) return null;
+  const inCol = ds => kc.find(c => Math.abs(ds.cx - c.cx) <= tx);
+  const gr = rows.map(g => ({cy: g.cy, items: g.items.filter(inCol)})).filter(g => g.items.length >= (kc.length > 1 ? 2 : 1));
+  if (gr.length < 2) return null;
+  const px = (x, y) => { const i = (Math.round(y) * W + Math.round(x)) * 4; return [d[i], d[i+1], d[i+2]]; };
+  const dist = (a, b) => Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1]) + Math.abs(a[2]-b[2]);
+  const pitch = gr.length > 1 ? (gr[gr.length - 1].cy - gr[0].cy) / (gr.length - 1) : H * .05;
+  const lefts = [], rights = [];
+  const outRows = gr.map(g => {
+    const first = g.items.reduce((a, b) => a.cx < b.cx ? a : b), last = g.items.reduce((a, b) => a.cx > b.cx ? a : b);
+    const sx = Math.max(1, first.x - 4), ref = px(sx, g.cy), lim = pitch * .55;
+    let top = g.cy, bot = g.cy;
+    while (top > 1 && g.cy - top < lim && dist(px(sx, top - 1), ref) < 60) top--;
+    while (bot < H - 2 && bot - g.cy < lim && dist(px(sx, bot + 1), ref) < 60) bot++;
+    let l = sx; while (l > 1 && first.cx - l < W * .45 && dist(px(l - 1, g.cy), ref) < 60) l--;
+    const ex = Math.min(W - 2, last.x + last.w + 4); const ref2 = px(ex, g.cy);
+    let rr = ex; while (rr < W - 2 && rr - last.cx < W * .45 && dist(px(rr + 1, g.cy), ref2) < 60) rr++;
+    lefts.push(l); rights.push(rr);
+    let h = bot - top + 1;
+    if (h < first.h * 3 || h > pitch * 1.05) { h = Math.round(pitch * .78); top = g.cy - h / 2; }
+    return {top: Math.round(top), h: Math.round(h), cy: g.cy};
+  });
+  const med = a => { const b = [...a].sort((x, y) => x - y); return b[b.length >> 1]; };
+  const mh = med(outRows.map(r => r.h)), moff = med(outRows.map(r => r.cy - r.top));
+  outRows.forEach(r => { if (Math.abs(r.h - mh) > mh * .15) { r.h = mh; r.top = Math.round(r.cy - moff); } delete r.cy; });
+  const bandL = med(lefts), bandR = med(rights), cs = kc.map(c => c.cx);
+  const outCols = cs.map((c, i) => {
+    const lb = i ? (cs[i-1] + c) / 2 : bandL, rb = i < cs.length - 1 ? (c + cs[i+1]) / 2 : bandR;
+    const half = Math.max(8, Math.min(c - lb, rb - c) - 4);
+    return {x: Math.round(c - half), w: Math.round(half * 2)};
+  });
+  const used = gr.flatMap(g => g.items);
+  const avg = used.reduce((s, x) => [s[0] + x.rgb[0], s[1] + x.rgb[1], s[2] + x.rgb[2]], [0, 0, 0]).map(v => Math.round(v / used.length));
+  let rgb = avg;
+  const al = .299 * avg[0] + .587 * avg[1] + .114 * avg[2]; if (al > 185) rgb = [255, 255, 255]; else if (al < 50) rgb = [0, 0, 0];
+  const color = '#' + rgb.map(v => Math.min(255, v).toString(16).padStart(2, '0')).join('');
+  return {W, H, rows: outRows, cols: outCols, dashes: used, color};
+}
+function cleanDashes(img, dashes){
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const cx = cv.getContext('2d', {willReadFrequently: true}); cx.drawImage(img, 0, 0, W, H);
+  const id = cx.getImageData(0, 0, W, H), d = id.data, pad = Math.max(5, Math.round(H / 350));
+  for (const ds of dashes) {
+    const x0 = Math.max(0, ds.x - pad), x1 = Math.min(W - 1, ds.x + ds.w + pad), y0 = Math.max(1, ds.y - pad), y1 = Math.min(H - 2, ds.y + ds.h + pad);
+    for (let x = x0; x <= x1; x++) {
+      const a = ((y0 - 1) * W + x) * 4, b = ((y1 + 1) * W + x) * 4;
+      for (let y = y0; y <= y1; y++) { const t = (y - y0 + 1) / (y1 - y0 + 2), i = (y * W + x) * 4; for (let k = 0; k < 3; k++) d[i+k] = d[a+k] * (1 - t) + d[b+k] * t; d[i+3] = 255; }
+    }
+  }
+  cx.putImageData(id, 0, 0);
+  return cv;
+}
+/* ---------- general placeholder detection ---------- */
+function pixelsOf(img, maxSide){
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+  const s = Math.min(1, (maxSide || 1400) / Math.max(W, H)), w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d', {willReadFrequently: true}); cx.drawImage(img, 0, 0, w, h);
+  return {W, H, w, h, s, d: cx.getImageData(0, 0, w, h).data};
+}
+const cdist = (d, i, c) => Math.abs(d[i] - c[0]) + Math.abs(d[i+1] - c[1]) + Math.abs(d[i+2] - c[2]);
+const lumOf = c => .299 * c[0] + .587 * c[1] + .114 * c[2];
+/* horizontal uniform bands (table rows, bars, cells) */
+function findBands(P){
+  const {w, h, d} = P, gap = Math.round(w * .2), lines = [];
+  for (let y = 0; y < h; y++) {
+    // 1) split the scanline into flat-colour segments
+    const segs = []; let x = 0;
+    while (x < w) {
+      const i0 = (y * w + x) * 4, ref = [d[i0], d[i0+1], d[i0+2]]; let xx = x + 1;
+      for (; xx < w; xx++) { const i = (y * w + xx) * 4; if (cdist(d, i, ref) >= 36) break; ref[0] += (d[i] - ref[0]) * .05; ref[1] += (d[i+1] - ref[1]) * .05; ref[2] += (d[i+2] - ref[2]) * .05; }
+      if (xx - x >= 3) segs.push({x0: x, x1: xx - 1, n: xx - x, c: ref});
+      x = xx;
+    }
+    // 2) join same-colour segments across short interruptions (text, placeholders); keep every long run
+    const runs = [];
+    for (let i = 0; i < segs.length; i++) {
+      const a = segs[i]; if (a.n < w * .02) continue;
+      if (runs.some(r => a.x0 >= r.x0 && a.x1 <= r.x1 && Math.abs(r.c[0]-a.c[0]) + Math.abs(r.c[1]-a.c[1]) + Math.abs(r.c[2]-a.c[2]) < 40)) continue;
+      let end = a.x1, cnt = a.n;
+      for (let j = i + 1; j < segs.length; j++) {
+        const b = segs[j]; if (b.x0 - end > gap) break;
+        const same = Math.abs(b.c[0]-a.c[0]) + Math.abs(b.c[1]-a.c[1]) + Math.abs(b.c[2]-a.c[2]) < 40;
+        if (same) { end = b.x1; cnt += b.n; } else if (b.n >= Math.max(12, w * .025)) break; // a wide block of another colour ends the run
+      }
+      const span = end - a.x0 + 1;
+      if (span > w * .25 && cnt / span > .35) runs.push({x0: a.x0, x1: end, cnt, c: a.c.map(Math.round)});
+    }
+    lines.push(runs);
+  }
+  // 3) follow runs down the image to form bands (several can be open side by side)
+  const bands = [], open = [], minH = Math.max(6, h * .01);
+  const closeB = b => { if (b.y1 - b.y0 + 1 >= minH) { const m = a => { const c = [...a].sort((p, q) => p - q); return c[c.length >> 1]; }; bands.push({top: b.y0, bottom: b.y1, h: b.y1 - b.y0 + 1, x0: m(b.xs0), x1: m(b.xs1), c: b.c}); } };
+  for (let y = 0; y < h; y++) {
+    const used = new Set();
+    for (const r of lines[y]) {
+      const b = open.find(o => !used.has(o) && Math.abs(r.x0 - o.x0) < w * .015 && Math.abs(r.x1 - o.x1) < w * .015 && Math.abs(r.c[0]-o.c[0]) + Math.abs(r.c[1]-o.c[1]) + Math.abs(r.c[2]-o.c[2]) < 45);
+      if (b) { b.y1 = y; b.miss = 0; b.xs0.push(r.x0); b.xs1.push(r.x1); used.add(b); }
+      else { const nb = {y0: y, y1: y, x0: r.x0, x1: r.x1, xs0: [r.x0], xs1: [r.x1], c: r.c, miss: 0}; open.push(nb); used.add(nb); }
+    }
+    for (let k = open.length - 1; k >= 0; k--) { const o = open[k]; if (!used.has(o) && ++o.miss > 1) { closeB(o); open.splice(k, 1); } }
+  }
+  open.forEach(closeB);
+  return bands.filter(b => b.h < h * .2);
+}
+/* the largest set of same-size, evenly spaced bands = table rows */
+function pickRows(bands, P){
+  const {w, h} = P; let best = [];
+  for (const b of bands) {
+    const g = bands.filter(o => Math.abs(o.h - b.h) <= Math.max(3, b.h * .2) && Math.abs(o.x0 - b.x0) < w * .02 && Math.abs(o.x1 - b.x1) < w * .02).sort((p, q) => p.top - q.top);
+    if (g.length < 3) continue;
+    const diffs = g.slice(1).map((o, i) => o.top - g[i].top).sort((p, q) => p - q), pitch = diffs[diffs.length >> 1];
+    let run = [g[0]], bestRun = [g[0]];
+    for (let i = 1; i < g.length; i++) { const dlt = g[i].top - g[i-1].top; if (Math.abs(dlt - pitch) <= pitch * .25) run.push(g[i]); else run = [g[i]]; if (run.length > bestRun.length) bestRun = run.slice(); }
+    if (bestRun.length > best.length) best = bestRun;
+  }
+  if (best.length < 3) return null;
+  // drop a first/last band whose colour is far from the rest (a header bar)
+  const mc = [0, 1, 2].map(k => { const v = best.map(b => b.c[k]).sort((p, q) => p - q); return v[v.length >> 1]; });
+  const far = b => Math.abs(b.c[0]-mc[0]) + Math.abs(b.c[1]-mc[1]) + Math.abs(b.c[2]-mc[2]) > 60;
+  while (best.length > 3 && far(best[0])) best.shift();
+  while (best.length > 3 && far(best[best.length - 1])) best.pop();
+  return best;
+}
+/* ink (anything that is not the row colour) inside each row, grouped into x-intervals */
+function rowInk(P, r, x0, x1){
+  const {w, d} = P, prof = new Int32Array(w), ymin = new Int32Array(w).fill(1e9), ymax = new Int32Array(w).fill(-1);
+  const y0 = r.top + 2, y1 = r.bottom - 2;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const i = (y * w + x) * 4; if (cdist(d, i, r.c) > 80) { prof[x]++; if (y < ymin[x]) ymin[x] = y; if (y > ymax[x]) ymax[x] = y; } }
+  const out = [], mg = Math.max(4, Math.round(w * .014)); let s = -1, e = -1, n = 0, a = 1e9, b = -1, gapc = 0;
+  for (let x = x0; x <= x1 + mg + 1; x++) {
+    const on = x <= x1 && prof[x] > 0;
+    if (on) { if (s < 0) { s = x; n = 0; a = 1e9; b = -1; } e = x; n += prof[x]; a = Math.min(a, ymin[x]); b = Math.max(b, ymax[x]); gapc = 0; }
+    else if (s >= 0 && ++gapc > mg) { if (n >= 6 && e - s >= 2) out.push({x0: s, x1: e, cx: (s + e) / 2, y0: a, y1: b, n}); s = -1; }
+  }
+  return out;
+}
+function inkSignature(P, iv){
+  const {w, d} = P, GW = 12, GH = 6, sig = [];
+  const r = P._rowColor;
+  for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
+    const x = Math.round(iv.x0 + (iv.x1 - iv.x0) * (gx + .5) / GW), y = Math.round(iv.y0 + (iv.y1 - iv.y0) * (gy + .5) / GH);
+    sig.push(cdist(d, (y * w + x) * 4, iv.rc) > 80 ? 1 : 0);
+  }
+  return sig;
+}
+function headerColumns(P, rows, x0, x1, bands){
+  const {w, d} = P, r0 = rows[0];
+  // prefer a header bar right above the table; otherwise the strip just above the first row
+  const bar = (bands || []).filter(b => b.bottom < r0.top && r0.top - b.bottom < r0.h * 1.5 && b.h > r0.h * .4 && b.x0 < x1 && b.x1 > x0 && b.x1 - b.x0 > (x1 - x0) * .6).sort((p, q) => q.bottom - p.bottom)[0];
+  let yA, yB, bg;
+  if (bar) { yA = bar.top + 1; yB = bar.bottom - 1; bg = bar.c; }
+  else {
+    yA = Math.max(0, Math.round(r0.top - r0.h * 1.6)); yB = r0.top - 3; if (yB - yA < 4) return [];
+    const hist = new Map();
+    for (let y = yA; y <= yB; y += 2) for (let x = x0; x <= x1; x += 3) { const i = (y * w + x) * 4; const k = (d[i] >> 4) + ',' + (d[i+1] >> 4) + ',' + (d[i+2] >> 4); hist.set(k, (hist.get(k) || 0) + 1); }
+    bg = [...hist.entries()].sort((a, b) => b[1] - a[1])[0][0].split(',').map(v => +v * 16 + 8);
+  }
+  const prof = new Int32Array(w);
+  for (let y = yA; y <= yB; y++) for (let x = x0; x <= x1; x++) if (cdist(d, (y * w + x) * 4, bg) > 120) prof[x]++;
+  const out = [], mg = Math.round(w * .02); let s = -1, e = -1, n = 0, gapc = 0;
+  for (let x = x0; x <= x1 + mg + 1; x++) { const on = x <= x1 && prof[x] > 0; if (on) { if (s < 0) { s = x; n = 0; } e = x; n += prof[x]; gapc = 0; } else if (s >= 0 && ++gapc > mg) { if (n > 20 && e - s < (x1 - x0) * .5) out.push((s + e) / 2); s = -1; } }
+  return out;
+}
+function detectCells(img){
+  const P = pixelsOf(img, 1400), {w, h, s} = P;
+  const bands = findBands(P), rows = pickRows(bands, P);
+  if (!rows) return null;
+  const med = a => { const b = [...a].sort((p, q) => p - q); return b[b.length >> 1]; };
+  const X0 = med(rows.map(r => r.x0)), X1 = med(rows.map(r => r.x1));
+  // ink intervals per row
+  const all = [];
+  rows.forEach((r, ri) => rowInk(P, r, Math.max(0, X0 + 2), Math.min(w - 1, X1 - 2)).forEach(iv => { iv.ri = ri; iv.rc = r.c; all.push(iv); }));
+  const tol = w * .035, clusters = [];
+  for (const iv of all.sort((a, b) => a.cx - b.cx)) { const c = clusters.find(c => Math.abs(c.cx - iv.cx) <= tol); if (c) { c.items.push(iv); c.cx = c.items.reduce((t, x) => t + x.cx, 0) / c.items.length; } else clusters.push({cx: iv.cx, items: [iv]}); }
+  let cols = clusters.filter(c => new Set(c.items.map(i => i.ri)).size >= Math.max(2, Math.ceil(rows.length * .4)));
+  let source = 'cells';
+  cols.forEach(c => {
+    const sigs = c.items.map(iv => inkSignature(P, iv)), ref = sigs[0];
+    const sim = sigs.reduce((t, sg) => t + sg.filter((v, i) => v === ref[i]).length / sg.length, 0) / sigs.length;
+    const ws = c.items.map(i => i.x1 - i.x0), wv = (Math.max(...ws) - Math.min(...ws)) / Math.max(1, med(ws));
+    c.fixed = sim < .75 || wv >= .3; c.sim = sim; c.wv = wv;
+    const lefts = c.items.map(i => i.x0), rights = c.items.map(i => i.x1), cents = c.items.map(i => i.cx);
+    const sd = a => { const m = a.reduce((t, x) => t + x, 0) / a.length; return Math.sqrt(a.reduce((t, x) => t + (x - m) ** 2, 0) / a.length); };
+    c.align = sd(lefts) + 1 < sd(cents) * .6 ? 'left' : sd(rights) + 1 < sd(cents) * .6 ? 'right' : 'center';
+  });
+  if (!cols.length) {
+    const hc = headerColumns(P, rows, X0, X1, bands);
+    if (hc.length) { cols = hc.map(cx => ({cx, items: [], fixed: false, align: 'center'})); source = 'header'; }
+    else { cols = [{cx: (X0 + X1) / 2, items: [], fixed: false, align: 'center'}]; source = 'single'; }
+  }
+  cols.sort((a, b) => a.cx - b.cx);
+  const cs = cols.map(c => c.cx);
+  const outCols = cols.map((c, i) => {
+    const lb = i ? (cs[i-1] + c.cx) / 2 : X0, rb = i < cs.length - 1 ? (c.cx + cs[i+1]) / 2 : X1;
+    let x, wd;
+    if (c.align === 'left') { const L = med(c.items.map(t => t.x0)); x = L; wd = rb - L - 4; }
+    else if (c.align === 'right') { const R = med(c.items.map(t => t.x1)); x = lb + 4; wd = R - lb - 4; }
+    else { const half = Math.max(6, Math.min(c.cx - lb, rb - c.cx) - 3); x = c.cx - half; wd = half * 2; }
+    return {x: Math.round(x / s), w: Math.round(wd / s), align: c.align, fixed: c.fixed, hasInk: c.items.length > 0};
+  });
+  // marks to remove: placeholder ink only (never "fixed" content)
+  const marks = [];
+  cols.forEach(c => { if (!c.fixed) c.items.forEach(iv => { const r = rows[iv.ri]; const y0 = Math.max(r.top + 1, iv.y0 - 3), y1 = Math.min(r.bottom - 1, iv.y1 + 3); marks.push({x: Math.floor((iv.x0 - 3) / s), y: Math.floor(y0 / s), w: Math.ceil((iv.x1 - iv.x0 + 7) / s), h: Math.ceil((y1 - y0 + 1) / s)}); }); });
+  // text colour from placeholder ink, else contrast with the rows
+  let color = null; const inkC = [0, 0, 0]; let n = 0;
+  cols.filter(c => !c.fixed).forEach(c => c.items.forEach(iv => { const {d} = P; for (let y = iv.y0; y <= iv.y1; y++) for (let x = iv.x0; x <= iv.x1; x++) { const i = (y * w + x) * 4; if (cdist(d, i, iv.rc) > 160) { inkC[0] += d[i]; inkC[1] += d[i+1]; inkC[2] += d[i+2]; n++; } } }));
+  const rowC = rows[0].c;
+  if (n > 10) { let c = inkC.map(v => Math.round(v / n)); const L = lumOf(c); if (L > 185) c = [255, 255, 255]; else if (L < 50) c = [0, 0, 0]; color = c; }
+  else color = lumOf(rowC) < 140 ? [255, 255, 255] : [17, 17, 17];
+  const hex = '#' + color.map(v => v.toString(16).padStart(2, '0')).join('');
+  return {W: P.W, H: P.H, rows: rows.map(r => ({top: Math.round(r.top / s), h: Math.round(r.h / s)})), cols: outCols, dashes: marks, color: hex, source, bands: bands.map(b => ({top: b.top / s, h: b.h / s, x0: b.x0 / s, x1: b.x1 / s}))};
+}
+function detectAny(img){
+  let f = null;
+  try { f = detectCells(img); } catch (e) { f = null; }
+  if (f && f.source === 'cells' && f.cols.some(c => !c.fixed)) return f;
+  let g = null; try { g = detectTable(img); } catch (e) { g = null; }
+  if (g) { g.source = 'dashes'; g.cols.forEach(c => { c.fixed = false; c.hasInk = true; c.align = 'center'; }); return g; }
+  return f;
+}
+/* Claude looks at the design when nothing regular is found */
+async function detectWithClaude(t, img){
+  if (!S.sample) throw new Error('Claude is not available in this view');
+  const lim = await S.sample.limits().catch(() => null);
+  if (!(lim && lim.images)) throw new Error('reading images is not available in this view');
+  const P = pixelsOf(img, 1568), cv = document.createElement('canvas'); cv.width = P.w; cv.height = P.h; cv.getContext('2d').drawImage(img, 0, 0, P.w, P.h);
+  const blob = await canvasBlob(cv, 'image/jpeg');
+  const prompt = `This image is an empty template for an esports results graphic (any game). Find every spot where results data will be typed in later: team names, team logos, numbers such as kills, points, wins, scores, totals, player names, and any placeholder text (like "-", "00", "XX", "TEAM NAME", "TBD") or empty cells/boxes meant for data.
+Do NOT include fixed design text: titles, column headers, sponsor names, social handles, and rank numbers already printed in the design.
+Reply with ONLY JSON:
+{"table": {"rows": [{"y": 0.0, "h": 0.0}], "columns": [{"name": "Team", "type": "teamName", "x": 0.0, "w": 0.0}]} or null,
+ "spots": [{"name": "Stage", "type": "text", "x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0}]}
+All numbers are fractions of the image width (x, w) or height (y, h), from the top-left corner. Use "table" for repeated rows (standings), with one entry per row and one per column, naming columns from their headers (for example Team, Booyah, Kills, PP, Total). Use "spots" for single spots outside a table (head-to-head names, scores, logos). type is one of teamName, teamLogo, text.`;
+  const v = await S.sample.json(prompt, {images: [blob]});
+  if (!v || typeof v !== 'object') throw new Error('no layout came back');
+  const W = P.W, H = P.H, out = {W, H, rows: [], cols: [], dashes: [], color: '#ffffff', source: 'claude', names: [], types: [], spots: []};
+  const bands = findBands(P).map(b => ({top: b.top / P.s, h: b.h / P.s, x0: b.x0 / P.s, x1: b.x1 / P.s}));
+  const snapRow = (y, hh) => { const cy = y + hh / 2; const b = bands.filter(b => Math.abs(b.top + b.h / 2 - cy) < hh * .5 && Math.abs(b.h - hh) < hh * .6).sort((p, q) => Math.abs(p.top + p.h / 2 - cy) - Math.abs(q.top + q.h / 2 - cy))[0]; return b ? {top: Math.round(b.top), h: Math.round(b.h)} : {top: Math.round(y), h: Math.round(hh)}; };
+  if (v.table && Array.isArray(v.table.rows) && Array.isArray(v.table.columns) && v.table.rows.length && v.table.columns.length) {
+    out.rows = v.table.rows.map(r => snapRow(+r.y * H, +r.h * H)).filter(r => r.h > 4).sort((a, b) => a.top - b.top);
+    const cols = v.table.columns.map(c => ({x: Math.round(+c.x * W), w: Math.round(+c.w * W), name: String(c.name || ''), type: ['teamName','teamLogo','text','teamTag'].includes(c.type) ? c.type : 'text'})).filter(c => c.w > 4).sort((a, b) => a.x - b.x);
+    out.cols = cols.map(c => ({x: c.x, w: c.w, align: 'center', fixed: false, hasInk: true}));
+    out.names = cols.map(c => c.name); out.types = cols.map(c => c.type);
+  }
+  if (Array.isArray(v.spots)) out.spots = v.spots.map(sp => ({name: String(sp.name || 'Text'), type: ['teamName','teamLogo','text','teamTag'].includes(sp.type) ? sp.type : 'text', x: Math.round(+sp.x * W), y: Math.round(+sp.y * H), w: Math.round(+sp.w * W), h: Math.round(+sp.h * H)})).filter(sp => sp.w > 4 && sp.h > 4);
+  if (!out.rows.length && !out.spots.length) throw new Error('Claude found no spots in this design');
+  // marks: ink inside each found cell, measured against the cell's own main colour
+  const Q = pixelsOf(img, 1400), k = Q.s;
+  const boxes = [];
+  out.rows.forEach(r => out.cols.forEach(c => boxes.push({x: c.x, y: r.top, w: c.w, h: r.h})));
+  out.spots.filter(sp => sp.type !== 'teamLogo').forEach(sp => boxes.push(sp));
+  let inkC = [0, 0, 0], n = 0;
+  for (const b of boxes) {
+    const x0 = Math.max(0, Math.round(b.x * k)), x1 = Math.min(Q.w - 1, Math.round((b.x + b.w) * k)), y0 = Math.max(0, Math.round(b.y * k)), y1 = Math.min(Q.h - 1, Math.round((b.y + b.h) * k));
+    const hist = new Map();
+    for (let y = y0; y <= y1; y += 2) for (let x = x0; x <= x1; x += 2) { const i = (y * Q.w + x) * 4; const key = (Q.d[i] >> 4) + ',' + (Q.d[i+1] >> 4) + ',' + (Q.d[i+2] >> 4); hist.set(key, (hist.get(key) || 0) + 1); }
+    if (!hist.size) continue;
+    const bg = [...hist.entries()].sort((a, b2) => b2[1] - a[1])[0][0].split(',').map(v => +v * 16 + 8);
+    let a = 1e9, bx = -1, ay = 1e9, by = -1;
+    for (let y = y0 + 2; y <= y1 - 2; y++) for (let x = x0 + 2; x <= x1 - 2; x++) { const i = (y * Q.w + x) * 4; if (cdist(Q.d, i, bg) > 120) { a = Math.min(a, x); bx = Math.max(bx, x); ay = Math.min(ay, y); by = Math.max(by, y); inkC[0] += Q.d[i]; inkC[1] += Q.d[i+1]; inkC[2] += Q.d[i+2]; n++; } }
+    if (bx > a && (bx - a) < (x1 - x0) * .95 && (by - ay) < (y1 - y0) * .95) out.dashes.push({x: Math.floor((a - 3) / k), y: Math.floor((ay - 3) / k), w: Math.ceil((bx - a + 7) / k), h: Math.ceil((by - ay + 7) / k)});
+  }
+  if (n > 10) { let c = inkC.map(v => Math.round(v / n)); const L = lumOf(c); if (L > 185) c = [255, 255, 255]; else if (L < 50) c = [0, 0, 0]; out.color = '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); }
+  return out;
+}
+
+const PRESETS = [
+  {label: 'Any game', cols: ['Team', 'Wins', 'KP', 'PP', 'Total']},
+  {label: 'Free Fire', cols: ['Team', 'Booyah', 'KP', 'PP', 'Total']},
+  {label: 'PUBG Mobile / BGMI', cols: ['Team', 'WWCD', 'Elims', 'Place Pts', 'Total']},
+  {label: 'Any game', cols: ['Team', 'Matches', 'Wins', 'Kills', 'Total']},
+  {label: 'Any game', cols: ['Team', 'Kills', 'Points', 'Total']},
+  {label: 'Any game', cols: ['Team', 'Kills', 'Total']},
+  {label: 'Any game', cols: ['Team', 'Score']},
+];
+let DT = null;
+const SOURCE_TEXT = {
+  cells: 'were found from the placeholders in your design',
+  dashes: 'were found where the dashes are',
+  header: 'were found, with the columns lined up under your headers',
+  single: 'were found. Columns could not be told apart, so each row is one wide spot for now (you can split it in the editor)',
+  claude: 'were found by Claude looking at your design',
+};
+function openDetect(t, img, found, file){
+  DT = {t, img, found, file};
+  const n = found.cols.length, nu = found.cols.filter(c => !c.fixed).length;
+  const presets = PRESETS.filter(p => p.cols.length === nu);
+  const fromClaude = found.names && found.names.length === n ? {label: 'Found in your design', cols: found.names.map((x, i) => x || (i ? 'Column ' + (i + 1) : 'Team'))} : null;
+  const custom = {label: 'Custom', cols: ['Team', ...Array.from({length: Math.max(0, nu - 1)}, (_, i) => 'Column ' + (i + 2))]};
+  DT.presets = [...(fromClaude ? [fromClaude] : []), ...presets, custom];
+  const extra = (found.spots || []).length;
+  $('#dt-title').textContent = n ? 'Table found' : 'Spots found';
+  $('#dt-summary').textContent = (found.rows.length ? `${found.rows.length} rows and ${n} column${n === 1 ? '' : 's'} ${SOURCE_TEXT[found.source] || SOURCE_TEXT.cells}.` : `Claude found ${extra} spot${extra === 1 ? '' : 's'} in your design.`) + (extra && found.rows.length ? ` Plus ${extra} other spot${extra === 1 ? '' : 's'} outside the table.` : '') + ' Only these spots become editable; your headers and everything else stay as part of the background. Column names are just labels for filling in and importing, and are never drawn on the graphic.';
+  $('#dt-preset').innerHTML = DT.presets.map((p, i) => `<option value="${i}">${esc(p.label)}: ${esc(p.cols.join(' · '))}${p.label === 'Custom' ? ' (rename below)' : ''}</option>`).join('');
+  $('#dt-preset').closest('.field').classList.toggle('hidden', !n);
+  const fonts = allFontNames();
+  $('#dt-font').innerHTML = fonts.map(f => `<option ${f === 'Garet' ? 'selected' : ''}>${esc(f)}</option>`).join('');
+  $('#dt-weight').innerHTML = [400,500,600,700,800,900].map(w => `<option value="${w}" ${w === 700 ? 'selected' : ''}>${WEIGHT_NAME[w]}</option>`).join('');
+  $('#dt-color').value = found.color; $('#dt-colorhex').value = found.color;
+  const marks = found.dashes.length;
+  $('#dt-clean').checked = marks > 0; $('#dt-clean').closest('label').classList.toggle('hidden', !marks);
+  $('#dt-replace').textContent = t.zones.length ? `This replaces the ${t.zones.length} spot${t.zones.length === 1 ? '' : 's'} already marked.` : '';
+  $('#dt-claude').classList.toggle('hidden', !S.sample || found.source === 'claude');
+  renderDetectCols(0);
+  $('#detect-modal').classList.remove('hidden');
+}
+function renderDetectCols(pi){
+  const f = DT.found, p = DT.presets[pi] ? DT.presets[pi].cols : [];
+  const firstUsed = f.cols.findIndex(c => !c.fixed);
+  const typeOf = i => (f.types && f.types[i]) || (i === firstUsed ? 'teamName' : 'text');
+  let k = 0; // presets name the columns that are used, in order
+  $('#dt-cols').innerHTML = f.cols.map((c, i) => {
+    const use = !c.fixed; const name = use ? (p[k++] || 'Column ' + (i + 1)) : 'Printed ' + (i + 1);
+    return `<div class="row" style="flex-wrap:nowrap"><label class="check" title="Use this column"><input type="checkbox" id="dt-use-${i}" ${use ? 'checked' : ''} aria-label="Use column ${i + 1}"></label><input id="dt-col-${i}" value="${esc(name)}" aria-label="Column ${i + 1} name"><select id="dt-type-${i}" aria-label="Column ${i + 1} type" style="width:auto">${['teamName','text','teamTag','teamLogo'].map(t2 => `<option value="${t2}" ${typeOf(i) === t2 ? 'selected' : ''}>${t2 === 'text' ? 'Number / text' : TYPE_LABEL[t2]}</option>`).join('')}</select></div>${c.fixed ? '<p class="help" style="margin:-4px 0 4px 30px">This column changes from row to row (like printed rank numbers), so it looks like part of your design. Tick it if it should be editable.</p>' : ''}`;
+  }).join('') + ((f.spots || []).length ? `<p class="lab" style="margin-top:6px">Other spots</p>` + f.spots.map((sp, i) => `<div class="row" style="flex-wrap:nowrap"><label class="check"><input type="checkbox" id="dt-suse-${i}" checked aria-label="Use spot ${i + 1}"></label><input id="dt-sname-${i}" value="${esc(sp.name)}" aria-label="Spot ${i + 1} name"><select id="dt-stype-${i}" style="width:auto" aria-label="Spot ${i + 1} type">${['teamName','text','teamTag','teamLogo'].map(t2 => `<option value="${t2}" ${sp.type === t2 ? 'selected' : ''}>${t2 === 'text' ? 'Number / text' : TYPE_LABEL[t2]}</option>`).join('')}</select></div>`).join('') : '');
+}
+async function applyDetect(){
+  const {t, img, found} = DT, n = found.cols.length;
+  const use = Array.from({length: n}, (_, i) => $('#dt-use-' + i).checked);
+  const names = Array.from({length: n}, (_, i) => ($('#dt-col-' + i).value || '').trim() || 'Column ' + (i + 1));
+  const types = Array.from({length: n}, (_, i) => $('#dt-type-' + i).value);
+  const spots = (found.spots || []).map((sp, i) => ({...sp, use: $('#dt-suse-' + i).checked, name: ($('#dt-sname-' + i).value || '').trim() || sp.name, type: $('#dt-stype-' + i).value})).filter(sp => sp.use);
+  const usedNames = names.filter((_, i) => use[i]);
+  if (!usedNames.length && !spots.length) { toast('Tick at least one column or spot.', true); return; }
+  if (new Set(usedNames.map(norm)).size !== usedNames.length) { toast('Give each column a different name.', true); return; }
+  const font = $('#dt-font').value, weight = +$('#dt-weight').value, color = /^#[0-9a-f]{6}$/i.test($('#dt-colorhex').value) ? $('#dt-colorhex').value : $('#dt-color').value, pct = clamp(+$('#dt-size').value || 48, 20, 95) / 100;
+  const btn = $('[data-act="detect-apply"]'); btn.disabled = true;
+  try {
+    if ($('#dt-clean').checked && found.dashes.length) {
+      // only clean marks that sit in a column that is used (never fixed design text)
+      const inUsed = m => { const cx = m.x + m.w / 2; const ci = found.cols.findIndex(c => cx >= c.x - 4 && cx <= c.x + c.w + 4); return ci < 0 ? spots.length > 0 : use[ci]; };
+      const marks = found.dashes.filter(inUsed);
+      toast('Removing the placeholders…');
+      const cv = cleanDashes(img, marks), blob = await canvasBlob(cv);
+      if (!t.originalImage) t.originalImage = {...t.image};
+      if (t.example) { const ref = 'tmp:' + uid(); MEM.set(ref, cv); t.image = {ref, w: found.W, h: found.H}; }
+      else { const ref = await S.store.putBlob(blob, 'image/png'); const old = t.image.ref; t.image = {ref, w: found.W, h: found.H}; if (old && old !== t.originalImage.ref && !S.templates.some(o => o !== t && o.image.ref === old)) S.store.delBlob(old); }
+    }
+    const base = {font, weight, fit: true, color, valign: 'middle', ls: 0, sw: 0, sc: '#000000'};
+    const zones = [];
+    found.rows.forEach((r, ri) => found.cols.forEach((c, ci) => {
+      if (!use[ci]) return;
+      zones.push({...base, id: uid(), type: types[ci], field: names[ci], row: ri + 1, x: c.x, y: r.top, w: c.w, h: r.h, size: Math.round(r.h * pct), align: c.align || 'center', upper: types[ci] !== 'text', sample: types[ci] === 'text' ? String((ri * 7 + ci * 3) % 40 + 1) : ''});
+    }));
+    const seen = {};
+    spots.forEach(sp => { let f = sp.name; if (isTeamType(sp.type)) f = sp.name; else { seen[f] = (seen[f] || 0) + 1; if (seen[f] > 1) f += ' ' + seen[f]; }
+      zones.push({...base, id: uid(), type: sp.type, field: f, row: 0, x: sp.x, y: sp.y, w: sp.w, h: sp.h, size: Math.round(sp.h * .75), align: 'center', upper: sp.type !== 'text', sample: ''}); });
+    t.zones = zones;
+    const total = usedNames.find(x => roleOf(x) === 'total');
+    if (total) { const from = names.filter((x, i) => use[i] && types[i] === 'text' && x !== total && ['kp','pp','kills'].includes(roleOf(x))); t.calc = from.filter(x => roleOf(x) !== 'kills').length ? {target: total, from: from.filter(x => roleOf(x) !== 'kills')} : null; }
+    await doSave(t);
+    $('#detect-modal').classList.add('hidden'); DT = null;
+    S.sel = null; S.fit = true; layoutStage(); renderBoxes(); renderPanel(); renderChips(); previewEditor(); updateRestoreBtn();
+    toast(`${zones.length} spots placed. Tap any spot to fine-tune it, or go to Fill in results.`);
+  } catch (e) { toast('Could not set up the spots: ' + errMsg(e), true); }
+  finally { btn.disabled = false; }
+}
+async function runDetect(t, img, file, quiet){
+  let found = null;
+  try { found = detectAny(img); } catch (e) { found = null; }
+  if (found) { openDetect(t, img, found, file); return true; }
+  if (S.sample) { DT = {t, img, file}; $('#claude-modal').classList.remove('hidden'); return true; }
+  if (!quiet) toast('No table or placeholders were found. Mark the spots with Draw spot.', true);
+  return false;
+}
+async function askClaudeLayout(){
+  const d = DT; if (!d) return;
+  $('#claude-modal').classList.add('hidden'); $('#detect-modal').classList.add('hidden');
+  toast('Claude is looking at your design… this can take up to a minute.');
+  try { const found = await detectWithClaude(d.t, d.img); openDetect(d.t, d.img, found, d.file); }
+  catch (e) { const c = e && e.code; toast(c === 'not_granted' ? 'Claude was not allowed to look at it. Mark the spots with Draw spot instead.' : c === 'rate_limited' ? 'Claude is busy or your usage limit was reached. Try again later.' : 'Claude could not find the spots: ' + errMsg(e), true); }
+}
+function updateRestoreBtn(){ const b = $('#restore-btn'); if (b) b.classList.toggle('hidden', !(S.cur && S.cur.originalImage)); }
+async function restoreOriginal(){
+  const t = S.cur; if (!t || !t.originalImage) return;
+  const cur = t.image.ref; t.image = {...t.originalImage}; delete t.originalImage;
+  await doSave(t);
+  if (cur !== t.image.ref && !S.templates.some(o => o !== t && o.image.ref === cur)) S.store.delBlob(cur);
+  S.fit = true; layoutStage(); previewEditor(); updateRestoreBtn(); toast('Original design restored. Your spots were kept.');
+}
+
+/* ---------- auto total ---------- */
+function applyCalc(t, data){
+  const c = t.calc; if (!c || !c.target || !c.from || !c.from.length) return;
+  const tm = tableModel(t);
+  const num = v => { const n = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, '')); return isFinite(n) ? n : null; };
+  for (const r of tm.rows) {
+    const k = c.target + '|' + r; if (!tm.has.has(k)) continue;
+    let any = false, sum = 0;
+    for (const f of c.from) { const v = num(data.values[f + '|' + r]); if (v != null) { any = true; sum += v; } }
+    if (any) data.values[k] = String(Math.round(sum * 100) / 100); else delete data.values[k];
+  }
+}
+
+
+/* ---------- results import (any game, many formats) ---------- */
+const ROLE_WORDS = {
+  team: ['team','teamname','teams','squad','squadname','name','clan','org','organisation','organization','club','roster'],
+  wins: ['booyah','booyahs','wins','win','wwcd','chickendinner','chickendinners','dinner','dinners','victory','victories','victoryroyale','victoryroyales','top1','firsts','1st'],
+  kills: ['kills','kill','elims','elim','eliminations','elimination','finishes','finish','frags','k','totalkills'],
+  kp: ['kp','killpoints','killpoint','killpts','kpts','elimpoints','elimpts','elimspts','finishpoints','finishpts'],
+  pp: ['pp','placementpoints','placementpts','placepoints','placepts','positionpoints','positionpts','pospts','rankpoints','rankpts','placementscore'],
+  total: ['total','totalpoints','totalpts','pts','points','score','overall','totalscore','tp','overallpoints'],
+  placement: ['placement','place','position','pos','finish','placed','matchrank','matchplacement'],
+  rank: ['rank','#','no','overallrank','standing'],
+  match: ['match','game','round','map','matchno','gameno','matchnumber','gamenumber','day'],
+  matches: ['matches','games','played','mp','gp','matchesplayed','gamesplayed'],
+};
+function roleOf(h){
+  const n = norm(h); if (!n && String(h).trim() === '#') return 'rank';
+  for (const [role, words] of Object.entries(ROLE_WORDS)) if (words.includes(n)) return role;
+  if (/booyah|wwcd|dinner|victor/.test(n)) return 'wins';
+  if (/kill|elim|frag/.test(n)) return /p(oin)?ts?$|point/.test(n) ? 'kp' : 'kills';
+  if (/placement|position/.test(n)) return /p(oin)?ts?$|point/.test(n) ? 'pp' : 'placement';
+  if (/total|overall/.test(n)) return 'total';
+  return null;
+}
+const PLACEMENT_PRESETS = [
+  {id: 'ff', label: 'Free Fire style', pts: [12, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0]},
+  {id: 'pubgm', label: 'PUBG Mobile / BGMI style', pts: [10, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]},
+  {id: 'flat', label: 'Simple: 10 down to 1', pts: [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]},
+];
+const defaultScoring = () => ({preset: 'ff', pts: PLACEMENT_PRESETS[0].pts.slice(), perKill: 1});
+const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g, '').replace(/[^0-9.\-]/g, '')); return isFinite(n) ? n : null; };
+let IM = null; // last parsed import
+
+function loadScript(src){ return new Promise((res, rej) => { if ([...document.scripts].some(s => s.src === src)) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('could not load the spreadsheet reader')); document.head.appendChild(s); }); }
+async function readSheet(file){
+  if (!window.XLSX) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  const wb = XLSX.read(await file.arrayBuffer(), {type: 'array'});
+  const grids = wb.SheetNames.map(n => ({name: n, grid: XLSX.utils.sheet_to_json(wb.Sheets[n], {header: 1, raw: false, defval: ''}).map(r => r.map(c => String(c ?? '').trim())).filter(r => r.some(Boolean))})).filter(g => g.grid.length);
+  return grids;
+}
+function jsonToGrids(v){
+  if (v && !Array.isArray(v) && typeof v === 'object') {
+    const arr = Object.values(v).find(x => Array.isArray(x));
+    if (arr) v = arr; else v = Object.entries(v).map(([k, x]) => (x && typeof x === 'object') ? Object.assign({team: k}, x) : {team: k, total: x});
+  }
+  if (!Array.isArray(v) || !v.length) return [];
+  if (Array.isArray(v[0])) return [{name: 'data', grid: v.map(r => r.map(c => String(c ?? '')))}];
+  const flat = v.map(o => { const out = {}; for (const [k, x] of Object.entries(o || {})) { if (x && typeof x === 'object' && !Array.isArray(x)) { if (x.name && /team/i.test(k)) out[k] = x.name; else for (const [k2, y] of Object.entries(x)) out[k2] = y; } else out[k] = x; } return out; });
+  const heads = [...new Set(flat.flatMap(o => Object.keys(o)))];
+  return [{name: 'data', grid: [heads, ...flat.map(o => heads.map(h => String(o[h] ?? '')))]}];
+}
+/* grids -> {mode, teams:[{team, wins, kills, kp, pp, total, matches, extra}], headers, notes} */
+function gridsToStats(grids, scoring){
+  const notes = [];
+  let records = [], headersAll = [];
+  for (const g of grids) {
+    const grid = g.grid.filter(r => r.some(c => String(c).trim()));
+    if (!grid.length) continue;
+    const roles0 = grid[0].map(roleOf);
+    let heads, body;
+    if (roles0.filter(Boolean).length >= 1 && roles0.includes('team') || roles0.filter(Boolean).length >= 2) { heads = grid[0].map(h => String(h).trim()); body = grid.slice(1); }
+    else {
+      // no header row: first text column = team, then numbers in order
+      const w = Math.max(...grid.map(r => r.length));
+      heads = Array.from({length: w}, (_, i) => i === 0 ? 'Team' : 'Column ' + (i + 1));
+      const tcol = Array.from({length: w}, (_, i) => i).find(i => grid.some(r => r[i] && num(r[i]) == null && !/^#?\d+[.)]?$/.test(r[i].trim())));
+      if (tcol != null && tcol !== 0) { heads[0] = 'Rank'; heads[tcol] = 'Team'; }
+      body = grid; notes.push('No column names found, so columns were read in order.');
+    }
+    const roles = heads.map(roleOf);
+    if (!roles.includes('team')) { const i = heads.findIndex((h, i) => body.some(r => r[i] && num(r[i]) == null)); if (i >= 0) roles[i] = 'team'; }
+    headersAll.push(...heads.filter((h, i) => !roles[i]));
+    for (const r of body) {
+      const rec = {extra: {}};
+      heads.forEach((h, i) => { const v = (r[i] ?? '').toString().trim(); const role = roles[i]; if (role) { if (rec[role] == null || rec[role] === '') rec[role] = v; } else if (h) rec.extra[norm(h)] = v; });
+      if (!rec.team || num(rec.team) != null && !/[a-z]/i.test(rec.team)) continue;
+      rec.team = rec.team.replace(/^\s*#?\d+[.)\-:]\s+/, '').trim();
+      if (grids.length > 1 && rec.match == null) rec.match = g.name;
+      records.push(rec);
+    }
+  }
+  if (!records.length) return {teams: [], notes: ['No team rows were found.'], mode: 'none', headers: []};
+  const seen = new Map(); let dup = false; for (const r of records) { const k = norm(r.team); if (seen.has(k)) dup = true; seen.set(k, 1); }
+  const has = role => records.some(r => r[role] != null && r[role] !== '');
+  const perMatch = dup || has('match') || (has('placement') && !has('pp') && !has('total'));
+  const ptsFor = p => { const i = Math.round(num(p)) - 1; return i >= 0 && i < scoring.pts.length ? scoring.pts[i] : 0; };
+  const by = new Map();
+  for (const r of records) {
+    const k = norm(r.team); let t = by.get(k);
+    if (!t) { t = {team: r.team, wins: 0, kills: 0, kp: 0, pp: 0, total: 0, matches: 0, extra: {}, _hasKills: false, _hasKp: false}; by.set(k, t); }
+    if (perMatch) {
+      t.matches += 1;
+      const kills = num(r.kills), kp = num(r.kp), pl = num(r.placement), pp = num(r.pp), tot = num(r.total), w = num(r.wins);
+      if (kills != null) { t.kills += kills; t._hasKills = true; }
+      const kpv = kp != null ? kp : (kills != null ? kills * scoring.perKill : 0); t.kp += kpv;
+      const ppv = pp != null ? pp : (pl != null ? ptsFor(pl) : 0); t.pp += ppv;
+      t.total += tot != null && pp == null && pl == null ? tot : kpv + ppv;
+      if (w != null) t.wins += w; else if (pl === 1) t.wins += 1;
+    } else {
+      const kills = num(r.kills), kp = num(r.kp), pp = num(r.pp), tot = num(r.total), w = num(r.wins), m = num(r.matches);
+      t.kills = kills ?? 0; t._hasKills = kills != null;
+      t.kp = kp != null ? kp : (kills != null ? kills * scoring.perKill : 0);
+      t.pp = pp ?? 0; t.wins = w ?? 0; t.matches = m ?? 0;
+      t.total = tot != null ? tot : t.kp + t.pp;
+    }
+    Object.assign(t.extra, r.extra);
+  }
+  const teams = [...by.values()].sort((a, b) => b.total - a.total || b.wins - a.wins || b.kp - a.kp || a.team.localeCompare(b.team));
+  teams.forEach((t, i) => { t.rank = i + 1; for (const k of ['wins','kills','kp','pp','total','matches']) t[k] = Math.round(t[k] * 100) / 100; });
+  const nMatches = perMatch ? new Set(records.map(r => r.match ?? '')).size : 0;
+  return {teams, mode: perMatch ? 'matches' : 'standings', nMatches, headers: [...new Set(headersAll)], notes};
+}
+const STAT_LABEL = {wins: 'Wins / Booyah / WWCD', kills: 'Kills', kp: 'Kill points', pp: 'Placement points', total: 'Total', matches: 'Matches played', rank: 'Overall rank'};
+function guessSource(field){
+  const r = roleOf(field);
+  if (r === 'placement') return 'rank';
+  if (r && STAT_LABEL[r]) return r;
+  return 'x:' + norm(field);
+}
+async function importFiles(files){
+  files = [...(files || [])]; if (!files.length) return;
+  const t = S.cur, sc = t.scoring || defaultScoring();
+  const imgs = files.filter(f => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif)$/i.test(f.name));
+  const docs = files.filter(f => !imgs.includes(f));
+  let grids = [];
+  setImportMsg('Reading…');
+  try {
+    for (const f of docs) {
+      const ext = (f.name.split('.').pop() || '').toLowerCase();
+      if (['xlsx','xls','xlsm','ods','numbers'].includes(ext)) grids.push(...(await readSheet(f)).map(g => ({name: docs.length > 1 ? f.name.replace(/\.[^.]+$/, '') + ' ' + g.name : g.name, grid: g.grid})));
+      else if (ext === 'json') grids.push(...jsonToGrids(JSON.parse(await f.text())));
+      else { const g = parseTable(await f.text()); if (g.length) grids.push({name: f.name.replace(/\.[^.]+$/, ''), grid: g}); }
+    }
+    if (grids.length > 1 && !grids.every(g => g.grid[0].map(roleOf).includes('match'))) { /* several files/sheets = several matches */ }
+    if (imgs.length) grids.push(...await readWithClaude(imgs, null));
+  } catch (e) { setImportMsg(''); toast('Could not read that file: ' + errMsg(e), true); return; }
+  showImport(gridsToStats(grids, sc), grids);
+}
+async function readWithClaude(images, text){
+  if (!S.sample) throw new Error('reading screenshots needs this page to be opened in Claude');
+  const lim = await S.sample.limits().catch(() => null);
+  if (images && images.length && !(lim && lim.images)) throw new Error('reading images is not available in this view');
+  if (images && lim && lim.images && images.length > lim.images.maxCount) { toast(`Only the first ${lim.images.maxCount} images are read at once.`); images = images.slice(0, lim.images.maxCount); }
+  setImportMsg(images ? `Claude is reading ${images.length} image${images.length === 1 ? '' : 's'}… this can take up to a minute.` : 'Claude is reading the text…');
+  const prompt = `You are reading esports results so they can be put on a results graphic. ${images ? `There ${images.length === 1 ? 'is 1 image' : `are ${images.length} images`}.` : 'The results are in the text below.'}
+The results may be a final standings table, or the result of one or more single matches, from any game (Free Fire, PUBG Mobile, BGMI, Call of Duty Mobile, Apex, Fortnite, Valorant and others).
+Reply with ONLY a JSON object: {"columns": ["Team", ...], "rows": [["...", ...], ...]}
+Rules:
+- One row per team${images && images.length > 1 ? ' per image' : ''}. Copy team names exactly as written.
+- Use the column names shown (for example Booyah, WWCD, Kills, KP, PP, Placement, Total). If a team's placement in a single match is only shown by row order, add a "Placement" column with 1 for the first row, 2 for the second and so on.
+${images && images.length > 1 ? '- If the images are separate matches, add a first column "Match" holding the image number (1 for the first image). If they are pages of one standings table, do not add Match.\n' : ''}- Numbers as plain digits. Leave a cell as "" if it cannot be read. Do not invent teams or values.
+${text ? '\nResults text:\n' + text.slice(0, 60000) : ''}`;
+  try {
+    const v = await S.sample.json(prompt, images ? {images} : {});
+    if (!v || !Array.isArray(v.columns) || !Array.isArray(v.rows)) throw new Error('the reply was not a table');
+    return [{name: 'read', grid: [v.columns.map(String), ...v.rows.map(r => (Array.isArray(r) ? r : []).map(c => String(c ?? '')))]}];
+  } catch (e) {
+    const c = e && e.code;
+    const msg = c === 'not_granted' ? 'Claude was not allowed to read it. Allow it when asked, or use a spreadsheet or pasted text.' : c === 'rate_limited' ? 'Claude is busy or your usage limit was reached. Try again later.' : c === 'image_rejected' ? 'That image could not be used. Try a PNG or JPG screenshot.' : c === 'invalid_json' ? 'Claude could not turn it into a table. Try a clearer screenshot.' : errMsg(e);
+    throw new Error(msg);
+  }
+}
+async function importText(){
+  const txt = $('#imp-text').value.trim(); if (!txt) { toast('Paste some results first.'); return; }
+  const t = S.cur, sc = t.scoring || defaultScoring();
+  let grids = [];
+  if (/^\s*[\[{]/.test(txt)) { try { grids = jsonToGrids(JSON.parse(txt)); } catch (e) {} }
+  if (!grids.length) { const g = parseTable(txt); if (g.length) grids = [{name: 'pasted', grid: g}]; }
+  let st = gridsToStats(grids, sc);
+  const structured = grids.length && grids[0].grid[0] && grids[0].grid[0].map(roleOf).filter(Boolean).length >= 2;
+  if ((!st.teams.length || !structured) && S.sample) {
+    try { grids = await readWithClaude(null, txt); st = gridsToStats(grids, sc); } catch (e) { if (!st.teams.length) { setImportMsg(''); toast(errMsg(e), true); return; } }
+  }
+  showImport(st, grids);
+}
+function setImportMsg(m){ const el = $('#imp-msg'); if (el) el.textContent = m; }
+function showImport(st, grids){
+  const t = S.cur, tm = tableModel(t), box = $('#imp-result'); IM = {st, grids};
+  setImportMsg('');
+  if (!st.teams.length) { box.innerHTML = '<p class="help">No team rows were found. Make sure each row has a team name.</p>'; return; }
+  const srcs = [['', '— leave as it is —'], ...Object.entries(STAT_LABEL).filter(([k]) => k === 'rank' || st.teams.some(x => x[k])).map(([k, l]) => [k, l]), ...st.headers.map(h => ['x:' + norm(h), 'From file: ' + h])];
+  const saved = t.importMap || {};
+  const cols = tm.cols.filter(c => c.kind === 'text');
+  box.innerHTML = `<p class="help"><b>${st.teams.length} teams</b> read${st.mode === 'matches' ? ` from <b>${st.nMatches || 'several'} match${st.nMatches === 1 ? '' : 'es'}</b>, added up with your scoring rules` : ' as final standings'}, sorted by Total. ${st.notes.join(' ')}</p>
+    <div class="tablewrap"><table><thead><tr><th>#</th><th>Team</th><th>Wins</th><th>Kills</th><th>KP</th><th>PP</th><th>Total</th></tr></thead><tbody>${st.teams.slice(0, 20).map(x => `<tr><td class="n">${x.rank}</td><td>${esc(x.team)}${matchTeam(x.team) && matchTeam(x.team).id ? '' : ' <span class="chip">no logo</span>'}</td><td>${x.wins}</td><td>${x._hasKills ? x.kills : '–'}</td><td>${x.kp}</td><td>${x.pp}</td><td><b>${x.total}</b></td></tr>`).join('')}</tbody></table></div>
+    ${cols.length ? `<div class="form" style="gap:8px"><span class="lab">What goes in each column of your template</span>${cols.map((c, i) => { const g = saved[c.field] ?? guessSource(c.field); return `<div class="row" style="flex-wrap:nowrap"><span style="min-width:90px;font-weight:700">${esc(c.field)}</span><select id="imp-map-${i}" data-field="${esc(c.field)}" aria-label="Source for ${esc(c.field)}">${srcs.map(([v, l]) => `<option value="${esc(v)}" ${v === g ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`; }).join('')}</div>` : ''}
+    <div class="row"><button class="btn primary" data-act="imp-apply">Put these on the graphic</button><span class="muted small">${st.teams.length > tm.rows.length ? `Top ${tm.rows.length} fit this template.` : ''}</span></div>`;
+}
+function applyImport(){
+  const t = S.cur, tm = tableModel(t), st = IM && IM.st; if (!st) return;
+  const map = {}; $$('#imp-result select[data-field]').forEach(s => { map[s.dataset.field] = s.value; });
+  t.importMap = map;
+  const teamCol = tm.cols.find(c => c.kind === 'team');
+  tm.rows.forEach((r, i) => {
+    const x = st.teams[i];
+    tm.cols.forEach(c => {
+      const k = c.field + '|' + r; if (!tm.has.has(k)) return;
+      if (c.kind === 'team') { if (x) S.fill.teams[k] = matchTeam(x.team); else delete S.fill.teams[k]; return; }
+      if (c.kind !== 'text') return;
+      const src = map[c.field]; if (!src) return;
+      if (!x) { delete S.fill.values[k]; return; }
+      const v = src.startsWith('x:') ? x.extra[src.slice(2)] : x[src];
+      if (v == null || v === '') delete S.fill.values[k]; else S.fill.values[k] = String(v);
+    });
+  });
+  if (!teamCol) toast('This template has no team column, so only the numbers were filled.');
+  queueSave(t); renderFillForm(); onFillChange();
+  toast(`Filled ${Math.min(st.teams.length, tm.rows.length)} rows. Check the preview, then download.`);
+}
+function scoringCard(t){
+  const sc = t.scoring || defaultScoring();
+  return `<details><summary class="lab" style="cursor:pointer">Scoring rules for match-by-match results · ${esc((PLACEMENT_PRESETS.find(p => p.id === sc.preset) || {label: 'Custom'}).label)}, ${sc.perKill} per kill</summary>
+    <div class="form" style="gap:8px;margin-top:8px">
+      <p class="help">Used when your file lists each match (team, placement, kills). Kill points = kills × points per kill. Placement points come from the list below: first number for 1st place, second for 2nd, and so on.</p>
+      <div class="grid2">
+        <div class="field"><label for="sc-preset">Placement points</label><select id="sc-preset">${PLACEMENT_PRESETS.map(p => `<option value="${p.id}" ${sc.preset === p.id ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}<option value="custom" ${PLACEMENT_PRESETS.some(p => p.id === sc.preset) ? '' : 'selected'}>Custom</option></select></div>
+        <div class="field"><label for="sc-kill">Points per kill</label><input id="sc-kill" type="number" step="0.5" min="0" value="${sc.perKill}"></div>
+      </div>
+      <div class="field"><label for="sc-pts">Points for 1st, 2nd, 3rd…</label><input id="sc-pts" value="${esc(sc.pts.join(', '))}" inputmode="decimal"></div>
+      <div class="row"><button class="btn sm" data-act="sc-save">Save scoring rules</button></div>
+    </div></details>`;
+}
+function saveScoring(){
+  const t = S.cur;
+  const pts = $('#sc-pts').value.split(/[,\s;]+/).map(num).filter(v => v != null);
+  const perKill = num($('#sc-kill').value) ?? 1;
+  let preset = $('#sc-preset').value; const pp = PLACEMENT_PRESETS.find(p => p.id === preset);
+  if (pp && pp.pts.join(',') !== pts.join(',')) preset = 'custom';
+  t.scoring = {preset, pts: pts.length ? pts : defaultScoring().pts, perKill};
+  queueSave(t);
+  if (IM) showImport(gridsToStats(IM.grids, t.scoring), IM.grids);
+  toast('Scoring rules saved for this template.');
+}
+function importCard(t){
+  const canAI = !!S.sample;
+  return `<section class="card hot" id="imp-card"><h3>Import results</h3>
+    <p class="help">Drop in the results and the table fills itself. Spreadsheets (Excel, Google Sheets download, CSV), JSON, pasted text${canAI ? ', or screenshots of result screens and standings' : ''}. Works with final standings or match-by-match results from any game.</p>
+    <div class="row"><label class="btn primary file-btn" for="imp-file"><input type="file" id="imp-file" multiple accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.ods,.json${canAI ? ',image/png,image/jpeg,image/webp' : ''}">Choose files</label><span class="muted small" id="imp-msg"></span></div>
+    <details><summary class="lab" style="cursor:pointer">Or paste results</summary>
+      <textarea id="imp-text" placeholder="Team, Booyah, Kills, PP, Total&#10;Lagos Lions, 2, 45, 60, 105&#10;…&#10;&#10;or match by match:&#10;Match, Team, Placement, Kills&#10;1, Lagos Lions, 1, 12"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn sm" data-act="imp-text">Read pasted results</button>${canAI ? '<span class="muted small">Messy text (like a WhatsApp message) is read by Claude.</span>' : ''}</div>
+    </details>
+    ${scoringCard(t)}
+    <div id="imp-result"></div></section>`;
+}
+
+/* ---------- teams ---------- */
+function renderTeams(){
+  const q = norm($('#team-search').value), list = allTeams().filter(t => !q || norm(t.name).includes(q) || norm(t.tag).includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+  $('#team-count').textContent = S.teams.length ? `${S.teams.length} team${S.teams.length === 1 ? '' : 's'} saved` : 'No teams yet. Add each team once with its logo.';
+  $('#team-list').innerHTML = list.map(t => `<li class="titem"><div class="logo">${t.logo ? `<img alt="" data-ref="${esc(t.logo)}">` : 'No logo'}</div>
+    <div class="tinfo"><b>${esc(t.name)}</b><span class="muted small">${t.tag ? esc(t.tag) : 'No tag'}${t.example ? ' · Example' : ''}</span></div>
+    ${t.example ? '' : `<div class="row"><button class="btn sm" data-act="team-edit" data-id="${esc(t.id)}">Edit</button><button class="btn sm ghost danger" data-confirm="team-del" data-id="${esc(t.id)}">Delete</button></div>`}</li>`).join('') || `<li class="empty">${S.teams.length ? 'No teams match.' : 'Your teams will show here.'}</li>`;
+  $$('#team-list img[data-ref]').forEach(async im => { const i = await loadImage(im.dataset.ref); if (i) im.src = imgSrc(i); });
+}
+function resetTeamForm(){
+  S.editTeam = null; $('#team-form').reset(); $('#team-form-title').textContent = 'Add a team';
+  $('#tm-preview').innerHTML = 'No logo'; $('#tm-logo-note').textContent = ''; $('#tm-cancel').classList.add('hidden');
+}
+async function editTeam(id){
+  const t = S.teams.find(x => x.id === id); if (!t) return;
+  S.editTeam = t; $('#tm-name').value = t.name; $('#tm-tag').value = t.tag || ''; $('#tm-logo').value = '';
+  $('#team-form-title').textContent = 'Edit ' + t.name; $('#tm-cancel').classList.remove('hidden');
+  $('#tm-preview').innerHTML = 'No logo'; $('#tm-logo-note').textContent = t.logo ? 'Choose a file only to replace the logo.' : '';
+  if (t.logo) { const i = await loadImage(t.logo); if (i) $('#tm-preview').innerHTML = `<img alt="" src="${imgSrc(i)}">`; }
+  $('#team-form').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+async function saveTeam(e){
+  e.preventDefault();
+  const name = $('#tm-name').value.trim(), tag = $('#tm-tag').value.trim(), file = $('#tm-logo').files[0];
+  if (!name) return;
+  const dup = S.teams.find(t => norm(t.name) === norm(name) && t !== S.editTeam);
+  if (dup) { toast(`${dup.name} is already saved. Edit it instead.`, true); return; }
+  const btn = $('#tm-save'); btn.disabled = true;
+  try {
+    const t = S.editTeam || {id: uid(), createdAt: Date.now(), logo: null};
+    let old = null;
+    if (file) { const ref = await S.store.putBlob(file, file.type || undefined); old = t.logo; t.logo = ref; }
+    t.name = name; t.tag = tag;
+    await S.store.put('teams', t.id, t);
+    if (!S.editTeam) S.teams.push(t);
+    if (old) { imgCache.delete(old); S.store.delBlob(old); }
+    toast(`Saved ${name}.`); resetTeamForm(); renderTeams();
+  } catch (err) { toast('Could not save the team: ' + errMsg(err), true); }
+  finally { btn.disabled = false; }
+}
+async function bulkTeams(files){
+  files = [...files]; if (!files.length) return;
+  let added = 0; const skipped = [];
+  for (const f of files) {
+    const name = f.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!name || S.teams.some(t => norm(t.name) === norm(name))) { skipped.push(name); continue; }
+    toast(`Adding ${name}… (${added + 1} of ${files.length})`);
+    try { const ref = await S.store.putBlob(f, f.type || undefined); const t = {id: uid(), name, tag: '', logo: ref, createdAt: Date.now()}; await S.store.put('teams', t.id, t); S.teams.push(t); added++; }
+    catch (e) { skipped.push(name); }
+  }
+  renderTeams();
+  toast(`Added ${added} team${added === 1 ? '' : 's'}.` + (skipped.length ? ` Skipped (already saved or failed): ${skipped.join(', ')}.` : ''), !!skipped.length);
+}
+
+/* ---------- fonts ---------- */
+function renderFonts(){
+  $('#my-fonts').innerHTML = S.fonts.length ? [...S.fonts].sort((a, b) => a.family.localeCompare(b.family) || (a.weight || 400) - (b.weight || 400)).map(f => `<div class="fontrow"><span class="sample" style="font-family:'${esc(f.family)}';font-weight:${f.weight || 400}">${esc(f.family)}</span><span class="muted small">${WEIGHT_NAME[f.weight || 400] || f.weight}</span>${f.ok === false ? '<span class="chip">Failed to load</span>' : ''}<button class="btn sm ghost danger" data-confirm="font-del" data-id="${esc(f.id)}">Delete</button></div>`).join('') : '<p class="muted small">No uploaded fonts yet.</p>';
+  $('#builtin-fonts').innerHTML = BUILTIN_FONTS.map(f => {
+    const need = UPLOAD_ONLY.includes(f) && !hasFont(f);
+    return `<div class="fontrow"><span class="sample" style="font-family:'${esc(f)}','${esc(FONT_FALLBACK[f] || 'Bricolage Grotesque')}'">Lions 3 – 1</span><span class="muted small">${esc(f)}${need ? ` · upload its files to use it (shows as ${esc(FONT_FALLBACK[f])} until then)` : ''}</span></div>`;
+  }).join('');
+}
+async function uploadFont(files){
+  files = [...(files || [])]; if (!files.length) return;
+  let done = 0;
+  for (const file of files) {
+    const type = fontType(file.name); if (!type) { toast(`${file.name}: use a .ttf, .otf, .woff or .woff2 file.`, true); continue; }
+    let {family, weight} = parseFontName(file.name);
+    if (BUILTIN_FONTS.includes(family) && !UPLOAD_ONLY.includes(family)) family += ' (yours)';
+    const same = S.fonts.find(f => f.family === family && (f.weight || 400) === weight);
+    try {
+      toast(`Uploading ${family} ${WEIGHT_NAME[weight] || weight}…`);
+      const ref = await S.store.putBlob(file, type);
+      const f = {id: same ? same.id : uid(), family, weight, ref, createdAt: Date.now()};
+      await registerFont(f);
+      if (f.ok === false) { S.store.delBlob(ref); toast(`${file.name} could not be read.`, true); continue; }
+      await S.store.put('fonts', f.id, {family, weight, ref, createdAt: f.createdAt});
+      if (same) { S.store.delBlob(same.ref); S.fonts = S.fonts.filter(x => x !== same); }
+      S.fonts.push(f); done++;
+    } catch (e) { toast('Font upload failed: ' + errMsg(e), true); }
+  }
+  renderFonts(); if (S.view === 'edit') renderPanel();
+  if (done) toast(`${done} font file${done === 1 ? '' : 's'} ready. Pick the font in a spot's Font list and set the weight.`);
+}
+
+/* ---------- actions ---------- */
+async function act(a, el){
+  const id = el && el.dataset.id;
+  switch (a) {
+    case 'back': S.cur = null; location.hash = '#templates'; showView('templates'); break;
+    case 'open-fill': { const t = tplById(id); if (t) openFill(t); break; }
+    case 'open-edit': { const t = tplById(id); if (t) openEditor(t); break; }
+    case 'to-fill': if (S.cur) openFill(S.cur); break;
+    case 'to-edit': if (S.cur) openEditor(S.cur); break;
+    case 'dup-tpl': { const o = tplById(id); if (!o) break; const t = JSON.parse(JSON.stringify(o)); t.id = uid(); t.name = o.name + ' copy'; t.createdAt = t.updatedAt = Date.now(); t.zones.forEach(z => z.id = uid());
+      try { await S.store.put('templates', t.id, t); S.templates.unshift(t); renderTemplates(); toast('Duplicated. Use Replace design image to swap in another design with the same spots.'); } catch (e) { toast('Could not duplicate: ' + errMsg(e), true); } break; }
+    case 'del-tpl': { const t = S.templates.find(x => x.id === id); if (!t) break;
+      try { await S.store.del('templates', id); S.templates = S.templates.filter(x => x !== t); if (!S.templates.some(o => o.image.ref === t.image.ref)) S.store.delBlob(t.image.ref); try { localStorage.removeItem(fillKey(t)); } catch (e) {} renderTemplates(); toast('Template deleted.'); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
+    case 'draw': S.drawMode = !S.drawMode; updateDrawBtn(); if (S.drawMode) toast('Drag over the design to draw a spot, or tap to drop one.'); break;
+    case 'zoom-in': S.fit = false; S.scale = Math.min(3, S.scale * 1.4); layoutStage(); break;
+    case 'zoom-out': S.fit = false; S.scale = Math.max(.05, S.scale / 1.4); layoutStage(); break;
+    case 'zoom-fit': S.fit = true; layoutStage(); break;
+    case 'dup-zone': { const z = selZone(); if (!z) break; const n = Object.assign({}, z, {id: uid(), x: z.x + 20, y: z.y + 20}); S.cur.zones.push(n); selectZone(n.id); previewEditor(); queueSave(S.cur); break; }
+    case 'del-zone': { if (!S.sel) break; S.cur.zones = S.cur.zones.filter(z => z.id !== S.sel); selectZone(null); previewEditor(); queueSave(S.cur); break; }
+    case 'deselect': selectZone(null); break;
+    case 'nudge': { const z = selZone(); if (!z) break; const [dx, dy] = el.dataset.d.split(',').map(Number); const st = Math.max(1, Math.round(2 / S.scale)); z.x += dx * st; z.y += dy * st; placeBox(z); renderPanel(); previewEditor(); queueSave(S.cur); break; }
+    case 'repeat': repeatRows(); break;
+    case 'detect': { if (!S.cur) break; const im = await loadImage(S.cur.image.ref); if (im) runDetect(S.cur, im, null, false); break; }
+    case 'detect-apply': applyDetect(); break;
+    case 'ask-claude': askClaudeLayout(); break;
+    case 'claude-cancel': $('#claude-modal').classList.add('hidden'); DT = null; toast('Tap Draw spot to mark the spots yourself.'); break;
+    case 'restore-original': restoreOriginal(); break;
+    case 'imp-text': importText(); break;
+    case 'imp-apply': applyImport(); break;
+    case 'sc-save': saveScoring(); break;
+    case 'detect-cancel': $('#detect-modal').classList.add('hidden'); DT = null; toast('Tap Draw spot to mark the spots yourself.'); break;
+    case 'calc-toggle': { const t = S.cur; if (!t) break; const tg = $('#calc-target').value, from = $$('#calc-from input:checked').map(i => i.value).filter(f => f !== tg); t.calc = (el.dataset.on === '1' && from.length) ? {target: tg, from} : null; if (el.dataset.on === '1' && !from.length) { toast('Tick at least one column to add up.', true); break; } queueSave(t); applyCalc(t, S.fill); renderFillForm(); onFillChange(); toast(t.calc ? `${tg} now adds up ${from.join(' + ')} automatically.` : 'Auto total turned off.'); break; }
+    case 'download': downloadOne(); break;
+    case 'clear-fill': S.fill = {values: {}, teams: {}, images: {}}; renderFillForm(); onFillChange(); break;
+    case 'paste-rows': pasteRows(); break;
+    case 'sort-rows': sortRows(); break;
+    case 'copy-headers': { const txt = batchHeaders(S.cur).map(h => h.label).join(', '); try { await navigator.clipboard.writeText(txt); toast('Column names copied.'); } catch (e) { $('#batch-in').value = txt + '\n'; toast('Copy is blocked here, so the names were put in the box for you.'); } break; }
+    case 'batch-make': batchMake(); break;
+    case 'batch-zip': batchZip(); break;
+    case 'batch-one': { const b = S.batch[+el.dataset.i]; if (b) offerDownload(b.blob, b.name); break; }
+    case 'team-edit': editTeam(id); break;
+    case 'team-cancel': resetTeamForm(); break;
+    case 'team-del': { const t = S.teams.find(x => x.id === id); if (!t) break; try { await S.store.del('teams', id); S.teams = S.teams.filter(x => x !== t); if (t.logo) S.store.delBlob(t.logo); if (S.editTeam === t) resetTeamForm(); renderTeams(); toast(`Deleted ${t.name}.`); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
+    case 'font-del': { const f = S.fonts.find(x => x.id === id); if (!f) break; try { await S.store.del('fonts', id); S.fonts = S.fonts.filter(x => x !== f); S.store.delBlob(f.ref); renderFonts(); toast('Font deleted. Spots using it fall back to another font.'); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
+    case 'modal-close': $('#modal').classList.add('hidden'); $('#modal-body').innerHTML = ''; break;
+  }
+}
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-confirm]');
+  if (c) {
+    e.preventDefault();
+    if (c.classList.contains('armed')) { c.classList.remove('armed'); act(c.dataset.confirm, c); }
+    else { c.classList.add('armed'); c._t = c.textContent; c.textContent = 'Tap again to delete'; setTimeout(() => { if (c.isConnected && c.classList.contains('armed')) { c.classList.remove('armed'); c.textContent = c._t; } }, 3500); }
+    return;
+  }
+  const b = e.target.closest('[data-act]');
+  if (b && !(b.closest('#ed-panel') && b.dataset.set)) { act(b.dataset.act, b); }
+  const tab = e.target.closest('.tabs a'); if (tab && location.hash === '#' + tab.dataset.tab) { e.preventDefault(); showView(tab.dataset.tab); }
+});
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') act('modal-close'); });
+
+/* ---------- init ---------- */
+(async function init(){
+  wireStage(); wireFill();
+  $('#tpl-upload').addEventListener('change', e => { uploadTemplate(e.target.files[0]); e.target.value = ''; });
+  $('#replace-img').addEventListener('change', e => { replaceImage(e.target.files[0]); e.target.value = ''; });
+  $('#team-form').addEventListener('submit', saveTeam);
+  $('#tm-logo').addEventListener('change', e => { const f = e.target.files[0]; $('#tm-preview').innerHTML = f ? `<img alt="" src="${URL.createObjectURL(f)}">` : 'No logo'; });
+  $('#bulk-logos').addEventListener('change', e => { bulkTeams(e.target.files); e.target.value = ''; });
+  $('#team-search').addEventListener('input', renderTeams);
+  $('#font-upload').addEventListener('change', e => { uploadFont(e.target.files); e.target.value = ''; });
+  $('#dt-preset').addEventListener('change', e => renderDetectCols(+e.target.value));
+  $('#dt-color').addEventListener('input', e => { $('#dt-colorhex').value = e.target.value; });
+  $('#dt-colorhex').addEventListener('input', e => { if (/^#[0-9a-f]{6}$/i.test(e.target.value)) $('#dt-color').value = e.target.value; });
+  window.addEventListener('hashchange', route);
+  route();
+  await Promise.race([Promise.all([document.fonts.load('400 64px "Bebas Neue"'), document.fonts.load('400 64px "Anton"')]).catch(() => {}), new Promise(r => setTimeout(r, 3000))]);
+  S.store = await initStore();
+  setBadge();
+  try {
+    const [tp, tm, fn] = await Promise.all(['templates','teams','fonts'].map(c => S.store.list(c).catch(e => { toast('Could not load ' + c + ': ' + errMsg(e), true); return []; })));
+    S.templates = tp.filter(t => t && t.image && Array.isArray(t.zones)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    S.teams = tm.filter(t => t && t.name);
+    S.fonts = fn.filter(f => f && f.ref && f.family);
+    S.fonts.forEach(f => { if (!f.weight) { const p = parseFontName(f.family); if (p.weight !== 400 || p.family !== f.family) { f.family = p.family; f.weight = p.weight; } } });
+    await Promise.all(S.fonts.map(registerFont));
+  } catch (e) { toast('Could not load your library: ' + errMsg(e), true); }
+  route();
+})();
+</script>
+</body>
+</html>
