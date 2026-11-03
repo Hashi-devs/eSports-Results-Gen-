@@ -540,31 +540,40 @@ function resolveZone(z, data, opts){
   }
   return p;
 }
-function drawText(ctx, z, text){
+const SQUEEZE = .85; // long text is narrowed up to 15% before its size has to drop
+function fontFor(z, s){ const f0 = z.font || 'Bebas Neue'; return `${z.weight || 400} ${s}px "${f0}", "${FONT_FALLBACK[f0] || 'Bricolage Grotesque'}", sans-serif`; }
+function setTextFont(ctx, z, s){ const size0 = z.size || Math.round(z.h * .8); ctx.font = fontFor(z, s); if ('letterSpacing' in ctx) ctx.letterSpacing = ((z.ls || 0) * s / size0) + 'px'; }
+/* the largest size (up to the spot's own size) at which this text fits, allowing a slight squeeze */
+function fitSize(ctx, z, text){
+  const t = z.upper ? text.toUpperCase() : text, size0 = z.size || Math.round(z.h * .8);
+  if (z.fit === false) return size0;
+  let size = size0, guard = 0;
+  ctx.save();
+  for (;;) {
+    setTextFont(ctx, z, size);
+    const w = ctx.measureText(t).width, cap = ctx.measureText('H').actualBoundingBoxAscent || size * .7;
+    if ((w * SQUEEZE <= z.w && cap <= z.h) || size <= 4 || guard++ > 80) break;
+    size = Math.max(4, size * Math.min(.97, w * SQUEEZE > z.w ? z.w / (w * SQUEEZE) : .97));
+  }
+  ctx.restore();
+  return size;
+}
+function drawText(ctx, z, text, sizeIn){
   if (!text) return;
   const t = z.upper ? text.toUpperCase() : text;
-  const size0 = z.size || Math.round(z.h * .8);
-  let size = size0;
-  const f0 = z.font || 'Bebas Neue';
-  const fam = `"${f0}", "${FONT_FALLBACK[f0] || 'Bricolage Grotesque'}", sans-serif`;
-  const setF = s => { ctx.font = `${z.weight || 400} ${s}px ${fam}`; if ('letterSpacing' in ctx) ctx.letterSpacing = ((z.ls || 0) * s / size0) + 'px'; };
+  const size0 = z.size || Math.round(z.h * .8), size = sizeIn || fitSize(ctx, z, text);
   ctx.save();
-  setF(size);
-  let m = ctx.measureText(t), cap = ctx.measureText('H').actualBoundingBoxAscent || size * .7;
-  if (z.fit !== false) {
-    let guard = 0;
-    while ((m.width > z.w || cap > z.h) && size > 4 && guard++ < 80) {
-      size = Math.max(4, size * Math.min(.97, m.width > z.w ? z.w / m.width : .97));
-      setF(size); m = ctx.measureText(t); cap = ctx.measureText('H').actualBoundingBoxAscent || size * .7;
-    }
-  }
+  setTextFont(ctx, z, size);
+  const m = ctx.measureText(t), cap = ctx.measureText('H').actualBoundingBoxAscent || size * .7;
+  const k = z.fit !== false && m.width > z.w ? Math.max(.5, z.w / m.width) : 1; // squeeze only what is needed
   const al = z.align || 'center';
   ctx.textAlign = al; ctx.textBaseline = 'alphabetic';
   const x = al === 'left' ? z.x : al === 'right' ? z.x + z.w : z.x + z.w / 2;
   const va = z.valign || 'middle';
   const y = va === 'top' ? z.y + cap : va === 'bottom' ? z.y + z.h - (m.actualBoundingBoxDescent || 0) : z.y + z.h / 2 + cap / 2;
-  if (z.sw > 0) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = z.sw * 2 * size / size0; ctx.strokeStyle = z.sc || '#000'; ctx.strokeText(t, x, y); }
-  ctx.fillStyle = z.color || '#fff'; ctx.fillText(t, x, y);
+  ctx.translate(x, y); ctx.scale(k, 1);
+  if (z.sw > 0) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = z.sw * 2 * size / size0; ctx.strokeStyle = z.sc || '#000'; ctx.strokeText(t, 0, 0); }
+  ctx.fillStyle = z.color || '#fff'; ctx.fillText(t, 0, 0);
   ctx.restore();
 }
 function drawContain(ctx, z, im){
@@ -595,10 +604,13 @@ async function renderTo(cv, t, data, opts = {}){
   const ctx = cv.getContext('2d');
   ctx.clearRect(0, 0, W, H);
   if (bg) ctx.drawImage(bg, 0, 0, W, H); else { ctx.fillStyle = '#1b2436'; ctx.fillRect(0, 0, W, H); }
+  // every row of a table column shares one text size: the size the longest entry needs
+  const colSize = {};
+  for (const p of plan) if (p.text && p.z.row > 0 && p.z.fit !== false) { const k = p.z.field + '|' + p.z.type; const sz = fitSize(ctx, p.z, p.text); colSize[k] = Math.min(colSize[k] ?? Infinity, sz); }
   for (const p of plan) {
     if (p.img) drawContain(ctx, p.z, p.img);
     else if (p.placeholder) drawPlaceholder(ctx, p.z, p.placeholder);
-    else if (p.text) drawText(ctx, p.z, p.text);
+    else if (p.text) drawText(ctx, p.z, p.text, p.z.row > 0 ? colSize[p.z.field + '|' + p.z.type] : null);
   }
   return true;
 }
@@ -920,7 +932,26 @@ function loadFill(t){
   return {values: {}, teams: {}, images: {}};
 }
 const saveFill = debounce(() => { const t = S.cur; if (!t || t.example) return; try { localStorage.setItem(fillKey(t), JSON.stringify({values: S.fill.values, teams: S.fill.teams})); } catch (e) {} }, 500);
-const previewFill = debounce(() => { if (S.cur && S.view === 'fill') renderTo($('#fill-canvas'), S.cur, S.fill, {}); }, 80);
+function totalField(t){ const tm = tableModel(t); if (t.calc && t.calc.target) return t.calc.target; const c = tm.cols.find(c => c.kind === 'text' && roleOf(c.field) === 'total'); return c ? c.field : null; }
+/* rows as they appear on the graphic: highest Total first, ties by wins then kills; empty rows last */
+function rankedFill(t, data){
+  const tm = tableModel(t), tf = totalField(t); if (!tm.rows.length || !tf) return data;
+  const winF = (tm.cols.find(c => roleOf(c.field) === 'wins') || {}).field, killF = (tm.cols.find(c => ['kp','kills'].includes(roleOf(c.field))) || {}).field;
+  const n = v => { const x = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, '')); return isFinite(x) ? x : null; };
+  const recs = tm.rows.map(r => {
+    const rec = {r, cells: {}}; let any = false;
+    tm.cols.forEach(c => { const k = c.field + '|' + r; rec.cells[c.field] = {v: data.values[k], t: data.teams[k], im: data.images[k]}; if (data.values[k] || data.teams[k] || data.images[k]) any = true; });
+    rec.empty = !any; rec.tot = n(data.values[tf + '|' + r]); rec.w = winF ? n(data.values[winF + '|' + r]) : null; rec.k = killF ? n(data.values[killF + '|' + r]) : null;
+    return rec;
+  });
+  const key = x => x ?? -Infinity;
+  const order = recs.slice().sort((a, b) => (a.empty - b.empty) || key(b.tot) - key(a.tot) || key(b.w) - key(a.w) || key(b.k) - key(a.k) || a.r - b.r);
+  const out = {values: Object.assign({}, data.values), teams: Object.assign({}, data.teams), images: Object.assign({}, data.images)};
+  const set = (o, k, v) => { if (v === undefined) delete o[k]; else o[k] = v; };
+  tm.rows.forEach((r, i) => tm.cols.forEach(c => { const k = c.field + '|' + r, x = order[i].cells[c.field]; set(out.values, k, x.v); set(out.teams, k, x.t); set(out.images, k, x.im); }));
+  return out;
+}
+const previewFill = debounce(() => { if (S.cur && S.view === 'fill') renderTo($('#fill-canvas'), S.cur, rankedFill(S.cur, S.fill), {}); }, 80);
 function openFill(t){
   S.cur = t; S.fill = loadFill(t); S.batch = []; applyCalc(t, S.fill);
   showView('fill');
@@ -951,11 +982,7 @@ function renderFillForm(){
   if (tm.rows.length) {
     const textCols = tm.cols.filter(c => c.kind === 'text');
     html += `<section class="card"><h3>Table</h3>
-      <details><summary class="btn sm" style="cursor:pointer;list-style:none;display:inline-flex">Type or paste the whole table</summary>
-        <p class="help" style="margin:8px 0">Copy rows from a spreadsheet, or type one row per line with commas between columns. Start with a line of column names (${esc(tm.cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}) or keep the column order above. Team names or tags are matched to your Teams.</p>
-        <textarea id="paste-rows" placeholder="${esc(tm.cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}"></textarea>
-        <div class="row" style="margin-top:8px"><button class="btn primary sm" data-act="paste-rows">Fill the table</button></div>
-      </details>
+
       <div class="tablewrap"><table><thead><tr><th>#</th>${tm.cols.map(c => `<th>${esc(c.field)}</th>`).join('')}</tr></thead><tbody>
       ${tm.rows.map(r => `<tr><td class="n">${r}</td>${tm.cols.map(c => { const k = c.field + '|' + r; if (!tm.has.has(k)) return '<td class="muted">–</td>';
         if (c.kind === 'team') return `<td>${teamSelect(k)}</td>`;
@@ -963,7 +990,7 @@ function renderFillForm(){
         const auto = t.calc && t.calc.target === c.field;
         return `<td><input data-val="${esc(k)}" value="${esc(S.fill.values[k] ?? '')}" ${auto ? 'readonly title="Worked out automatically" style="opacity:.8"' : ''} aria-label="${esc(c.field + ' ' + r)}" inputmode="${/kill|point|pts|score|total|place|rank|#/i.test(c.field) ? 'decimal' : 'text'}"></td>`; }).join('')}</tr>`).join('')}
       </tbody></table></div>
-      ${textCols.length ? `<div class="row"><span class="lab">Order rows by</span><select id="sort-col" aria-label="Sort column" style="width:auto">${textCols.map(c => `<option ${(t.calc ? t.calc.target === c.field : roleOf(c.field) === 'total') ? 'selected' : ''}>${esc(c.field)}</option>`).join('')}</select><button class="btn sm" data-act="sort-rows">Sort high to low</button></div>` : ''}
+      ${totalField(t) ? `<p class="help">The graphic always lists teams from the highest ${esc(totalField(t))} to the lowest, so you can type them in any order.</p>` : ''}
       ${textCols.length > 1 ? `<details ${t.calc ? 'open' : ''}><summary class="lab" style="cursor:pointer">Auto total ${t.calc ? `· on: ${esc(t.calc.target)} = ${esc(t.calc.from.join(' + '))}` : '· off'}</summary>
         <p class="help" style="margin-top:6px">Works out one column for you by adding others together, so you never type it. While it's on, that column is locked in the table above.</p>
         <div class="form" style="gap:8px;margin-top:8px">
@@ -1034,7 +1061,7 @@ function fileBase(t, data){
 }
 async function downloadOne(){
   const t = S.cur, btn = $('#dl-btn'); btn.disabled = true;
-  try { const cv = document.createElement('canvas'); await renderTo(cv, t, S.fill, {}); const blob = await canvasBlob(cv); await offerDownload(blob, fileBase(t, S.fill) + '.png'); countMade(1); }
+  try { const cv = document.createElement('canvas'); await renderTo(cv, t, rankedFill(t, S.fill), {}); const blob = await canvasBlob(cv); await offerDownload(blob, fileBase(t, S.fill) + '.png'); countMade(1); }
   catch (e) { toast('Could not make the image: ' + errMsg(e), true); }
   finally { btn.disabled = false; }
 }
@@ -1632,7 +1659,7 @@ function gridsToStats(grids, scoring){
   const teams = [...by.values()].sort((a, b) => b.total - a.total || b.wins - a.wins || b.kp - a.kp || a.team.localeCompare(b.team));
   teams.forEach((t, i) => { t.rank = i + 1; for (const k of ['wins','kills','kp','pp','total','matches']) t[k] = Math.round(t[k] * 100) / 100; });
   const nMatches = perMatch ? new Set(records.map(r => r.match ?? '')).size : 0;
-  return {teams, mode: perMatch ? 'matches' : 'standings', nMatches, headers: [...new Set(headersAll)], notes};
+  return {teams, hasTotal: !perMatch && has('total'), mode: perMatch ? 'matches' : 'standings', nMatches, headers: [...new Set(headersAll)], notes};
 }
 const STAT_LABEL = {wins: 'Wins / Booyah / WWCD', kills: 'Kills', kp: 'Kill points', pp: 'Placement points', total: 'Total', matches: 'Matches played', rank: 'Overall rank'};
 function guessSource(field){
@@ -1824,7 +1851,7 @@ function applyImport(){
   const map = {}; $$('#imp-result select[data-field]').forEach(s => { map[s.dataset.field] = s.value; });
   t.importMap = map;
   let calcNote = '';
-  if (t.calc && map[t.calc.target]) { t.calc = null; calcNote = ' Auto total was turned off because the totals came from your results.'; }
+  if (t.calc && map[t.calc.target] && st.hasTotal) { t.calc = null; calcNote = ' Auto total was turned off because the totals came from your results.'; }
   const teamCol = tm.cols.find(c => c.kind === 'team');
   tm.rows.forEach((r, i) => {
     const x = st.teams[i];
@@ -1871,7 +1898,7 @@ function importCard(t){
   return `<section class="card hot" id="imp-card"><h3>Import results</h3>
     <p class="help">Drop in the results and the table fills itself. Screenshots of result screens or standings, spreadsheets (Excel, Google Sheets download, CSV), JSON or pasted text. Works with final standings or match-by-match results from any game.</p>
     <div class="row"><label class="btn primary file-btn" for="imp-file"><input type="file" id="imp-file" multiple accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.ods,.json,image/png,image/jpeg,image/webp">Choose files</label><span class="muted small" id="imp-msg"></span></div>
-    <details><summary class="lab" style="cursor:pointer">Or paste results</summary>
+    <details><summary class="btn sm" style="cursor:pointer;list-style:none;display:inline-flex">Paste results</summary>
       <textarea id="imp-text" placeholder="Team, Booyah, Kills, PP, Total&#10;Lagos Lions, 2, 45, 60, 105&#10;…&#10;&#10;or match by match:&#10;Match, Team, Placement, Kills&#10;1, Lagos Lions, 1, 12"></textarea>
       <div class="row" style="margin-top:8px"><button class="btn sm" data-act="imp-text">Read pasted results</button>${canAI ? '<span class="muted small">Messy text (like a WhatsApp message) is read by Claude.</span>' : ''}</div>
     </details>
