@@ -281,7 +281,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
   <section id="view-fill" class="hidden">
     <div class="bar">
       <button class="btn ghost" data-act="back">← Templates</button>
-      <h2 id="fill-title" class="grow" style="font-size:1.4rem"></h2>
+      <input id="fill-title" class="grow" aria-label="Template name" style="font-family:var(--display);font-weight:800;font-size:1.3rem;text-transform:uppercase;letter-spacing:.03em;background:transparent;border-color:transparent">
       <button class="btn" data-act="to-edit">Mark spots</button>
     </div>
     <div class="fill">
@@ -359,6 +359,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
 <div id="detect-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dt-title">
   <div class="card">
     <h3 id="dt-title">Table found</h3>
+    <div class="field"><label for="dt-name">Template name</label><input id="dt-name" placeholder="e.g. MOG Overall Standings"></div>
     <p class="help" id="dt-summary"></p>
     <div class="field"><label for="dt-preset">Columns</label><select id="dt-preset"></select></div>
     <div id="dt-cols" class="form" style="gap:8px"></div>
@@ -511,9 +512,15 @@ const hasFont = fam => S.fonts.some(f => f.family === fam && f.ok !== false);
 /* ---------- teams ---------- */
 const allTeams = () => S.teams;
 const teamById = id => S.teams.find(t => t.id === id) || null;
+function lev(a, b){ const m = a.length, n = b.length; if (!m) return n; if (!n) return m; let prev = Array.from({length: n + 1}, (_, j) => j); for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1)); prev = cur; } return prev[n]; }
 function matchTeam(v){
   const n = norm(v); if (!n) return null;
-  const t = allTeams().find(t => norm(t.name) === n || (t.tag && norm(t.tag) === n));
+  let t = allTeams().find(t => norm(t.name) === n || (t.tag && norm(t.tag) === n));
+  if (!t && n.length >= 3) { // close spellings (screenshots, typos): "INFLUENCERAGE" -> "Influence Rage"
+    let best = null, bd = 1e9;
+    for (const x of allTeams()) for (const cand of [norm(x.name), norm(x.tag)].filter(Boolean)) { const d = lev(n, cand); if (d < bd) { bd = d; best = x; } }
+    if (best && bd <= Math.max(1, Math.floor(Math.min(n.length, norm(best.name).length) * .25))) t = best;
+  }
   return t ? {id: t.id, name: t.name} : {name: v.trim()};
 }
 function teamOf(sel){ if (!sel) return null; if (sel.id) { const t = teamById(sel.id); if (t) return t; } return sel.name ? {name: sel.name} : null; }
@@ -653,11 +660,12 @@ function renderTemplates(){
     <article class="tcard" data-id="${esc(t.id)}">
       <div class="thumb"><img alt="" data-ref="${esc(t.image.ref)}"></div>
       <div class="tbody">
-        <div class="tname">${esc(t.name)} ${t.example ? '<span class="chip">Example</span>' : ''}</div>
+        <div class="tname" id="tn-${esc(t.id)}">${esc(t.name)}</div>
         <div class="meta">${t.zones.length} spot${t.zones.length === 1 ? '' : 's'} · ${t.image.w}×${t.image.h}${tableModel(t).rows.length ? ` · ${tableModel(t).rows.length} rows` : ''}</div>
         <div class="row">
           <button class="btn primary sm" data-act="open-fill" data-id="${esc(t.id)}">Fill in results</button>
           <button class="btn sm" data-act="open-edit" data-id="${esc(t.id)}">Mark spots</button>
+          <button class="btn sm ghost" data-act="rename-tpl" data-id="${esc(t.id)}">Rename</button>
           ${t.example ? '' : `<button class="btn sm ghost" data-act="dup-tpl" data-id="${esc(t.id)}">Duplicate</button>
           <button class="btn sm ghost danger" data-confirm="del-tpl" data-id="${esc(t.id)}">Delete</button>`}
         </div>
@@ -673,7 +681,9 @@ async function uploadTemplate(file){
     toast('Uploading design…');
     const {w, h} = await imageSize(file);
     const ref = await S.store.putBlob(file, file.type);
-    const t = {id: uid(), name: file.name.replace(/\.[^.]+$/, ''), image: {ref, w, h}, zones: [], createdAt: Date.now(), updatedAt: Date.now()};
+    let nm = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    if (!/[a-z]{3,}/i.test(nm) || /^(img|image|screenshot|photo|pxl|dsc|whatsapp image)\b/i.test(nm)) nm = 'Results template ' + (S.templates.length + 1);
+    const t = {id: uid(), name: nm, image: {ref, w, h}, zones: [], createdAt: Date.now(), updatedAt: Date.now()};
     await S.store.put('templates', t.id, t);
     S.templates.unshift(t);
     openEditor(t);
@@ -693,6 +703,7 @@ function queueSave(t){
   t.updatedAt = Date.now(); setStatus('Saving…');
   clearTimeout(saveT[t.id]); saveT[t.id] = setTimeout(() => doSave(t), 800);
 }
+function queueSaveNow(t){ t.updatedAt = Date.now(); doSave(t); }
 async function doSave(t){
   if (saving[t.id]) { saving[t.id] = 'again'; return; }
   saving[t.id] = true;
@@ -746,13 +757,16 @@ function renderPanel(){
     el.innerHTML = `<div class="card"><h3>Mark the spots</h3>
       <p class="help">Tap <b>Draw spot</b>, then drag over each area where something changes: a team name, a logo, a score, kills, points. Tap a spot to choose what goes there and how it looks. Drag a spot to move it; drag the round handle to resize.</p>
       <p class="help">Spots with the same <b>name</b> share one entry. Use <b>Team A</b> and <b>Team B</b> for the logo and name spots of each side, so picking a team fills both.</p>
-      <p class="help">${S.cur.zones.length} spot${S.cur.zones.length === 1 ? '' : 's'} marked.</p></div>`;
+      <p class="help">${S.cur.zones.length} spot${S.cur.zones.length === 1 ? '' : 's'} marked.</p></div>
+      ${S.cur.zones.some(z => TEXT_TYPES.includes(z.type)) ? '<div class="card" style="margin-top:12px"><h3>Text style</h3><div id="style-ed"></div></div>' : ''}`;
+    renderStyleCards();
     return;
   }
   const isText = z.type === 'text' || z.type === 'teamName' || z.type === 'teamTag';
   const fonts = allFontNames(); if (z.font && !fonts.includes(z.font)) fonts.unshift(z.font);
   el.innerHTML = `<div class="card">
     <div class="row" style="justify-content:space-between"><h3>Spot</h3><div class="row"><button class="btn sm" data-act="dup-zone">Duplicate</button><button class="btn sm danger" data-act="del-zone">Delete</button></div></div>
+    ${z.row > 0 ? `<label class="check" style="background:rgba(198,255,26,.07);border:1px solid rgba(198,255,26,.3);padding:8px 10px"><input type="checkbox" id="z-link" ${S.linkCol ? 'checked' : ''}> Change the whole <b>&nbsp;${esc(z.field)}&nbsp;</b> column (all ${columnMates(z).length + 1} rows)</label>` : ''}
     <div class="field"><label for="z-type">What goes here</label><select id="z-type" data-k="type">${Object.keys(TYPE_LABEL).map(k => `<option value="${k}" ${z.type === k ? 'selected' : ''}>${TYPE_LABEL[k]}</option>`).join('')}</select></div>
     <div class="grid2">
       <div class="field"><label for="z-field">Name</label><input id="z-field" data-k="field" list="field-names" value="${esc(z.field)}"><datalist id="field-names">${['Team A','Team B','Score A','Score B','Team','Kills','Points','Placement','Total','MVP','Stage','Date', ...fieldNames()].filter((v, i, a) => a.indexOf(v) === i).map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
@@ -782,13 +796,19 @@ function renderPanel(){
   </div>`;
 }
 const NUM_KEYS = ['x','y','w','h','size','row','ls','sw','weight'];
+const LINK_KEYS = ['font','weight','size','color','align','valign','upper','ls','sw','sc','fit','x','w','type'];
+S.linkCol = true;
+const columnMates = z => S.cur.zones.filter(o => o !== z && o.row > 0 && o.field === z.field);
+function spreadToColumn(z, keys){ if (!S.linkCol || !z || !(z.row > 0)) return; for (const o of columnMates(z)) for (const k of keys) if (LINK_KEYS.includes(k)) o[k] = z[k]; }
 function onPanelInput(e){
+  if (e.target.id === 'z-link') { S.linkCol = e.target.checked; return; }
   const k = e.target.dataset.k, z = selZone(); if (!k || !z) return;
   let v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
   if (NUM_KEYS.includes(k)) { v = Number(v); if (!isFinite(v)) return; if (k === 'w' || k === 'h') v = Math.max(4, v); if (k === 'row') v = Math.max(0, Math.round(v)); }
   if (k === 'color' || k === 'sc') { if (!/^#[0-9a-fA-F]{6}$/.test(v)) return; $$(`#ed-panel [data-k="${k}"]`).forEach(i => { if (i !== e.target) i.value = v; }); }
   if (k === 'h' && z.type !== 'teamLogo' && z.type !== 'image' && z.size > v) { /* keep size, fit handles it */ }
   z[k] = v;
+  spreadToColumn(z, [k]);
   if (k === 'type') { if (isTeamType(v) && !isTeamType(z.prevType || 'text') && /^Text \d+$/.test(z.field)) z.field = nextField(v); z.prevType = v; renderPanel(); }
   if (k === 'type' || k === 'field' || k === 'row') { renderChips(); }
   renderBoxes(); previewEditor(); queueSave(S.cur);
@@ -850,7 +870,7 @@ function wireStage(){
       const W = S.cur.image.w;
       if (d.r && d.r.w * S.scale > 12 && d.r.h * S.scale > 12) newZone(d.r.x, d.r.y, d.r.w, d.r.h);
       else { const w = W * .25, h = W * .07; newZone(clamp(d.p0.x - w / 2, 0, W - w), Math.max(0, d.p0.y - h / 2), w, h); }
-    } else if (d.moved) { renderPanel(); previewEditor(); queueSave(S.cur); }
+    } else if (d.moved) { if (d.mode === 'resize') spreadToColumn(d.z, ['w']); else if (S.linkCol && d.z.row > 0) { const dx = d.z.x - d.o.x; for (const o of columnMates(d.z)) o.x += dx; } renderBoxes(); renderPanel(); previewEditor(); queueSave(S.cur); }
   };
   ov.addEventListener('pointerup', end); ov.addEventListener('pointercancel', end);
   ov.addEventListener('click', e => { if (e.target === ov && !S.drawMode && S.sel && Date.now() - lastDragEnd > 400) selectZone(null); });
@@ -859,9 +879,10 @@ function wireStage(){
   $('#ed-panel').addEventListener('click', e => {
     const b = e.target.closest('[data-set]'); if (!b) return;
     const [k, v] = b.dataset.set.split(':'); const z = selZone(); if (!z) return;
-    z[k] = v; renderPanel(); previewEditor(); queueSave(S.cur);
+    z[k] = v; spreadToColumn(z, [k]); renderPanel(); previewEditor(); queueSave(S.cur);
   });
   $('#ed-chips').addEventListener('click', e => { const b = e.target.closest('[data-sel]'); if (b) selectZone(b.dataset.sel); });
+  $('#fill-title').addEventListener('change', e => { if (!S.cur) return; const v = e.target.value.trim(); if (v) { S.cur.name = v; queueSave(S.cur); } else e.target.value = S.cur.name; });
   $('#ed-name').addEventListener('input', e => { if (!S.cur || S.cur.example) return; S.cur.name = e.target.value || 'Untitled template'; queueSave(S.cur); });
   $('#repeat').addEventListener('toggle', primeRepeat);
   $('#rep-row').addEventListener('change', primeRepeat);
@@ -903,7 +924,7 @@ const previewFill = debounce(() => { if (S.cur && S.view === 'fill') renderTo($(
 function openFill(t){
   S.cur = t; S.fill = loadFill(t); S.batch = []; applyCalc(t, S.fill);
   showView('fill');
-  $('#fill-title').textContent = t.name;
+  $('#fill-title').value = t.name;
   $('#fill-size').textContent = `${t.image.w}×${t.image.h}px`;
   renderFillForm(); previewFill();
 }
@@ -926,6 +947,7 @@ function renderFillForm(){
   if (!t.zones.length) html += `<div class="empty">No spots marked on this template yet.<br><br><button class="btn primary" data-act="to-edit">Mark spots</button></div>`;
   if (gen.length) html += `<section class="card"><h3>Details</h3><div class="gridf">${gen.map(fieldInput).join('')}</div>${S.teams.length ? '' : '<p class="help">No teams saved yet. Add them in the Teams tab to pick them here with their logos. Imported or pasted names still work without logos.</p>'}</section>`;
   if (tm.rows.length) html += importCard(t);
+  if (t.zones.some(z => TEXT_TYPES.includes(z.type))) html += `<details class="card"><summary>Text style</summary><p class="help">Font, size, colour and more for a whole column or for all the text at once.</p><div id="style-fill"></div></details>`;
   if (tm.rows.length) {
     const textCols = tm.cols.filter(c => c.kind === 'text');
     html += `<section class="card"><h3>Table</h3>
@@ -936,14 +958,15 @@ function renderFillForm(){
         const auto = t.calc && t.calc.target === c.field;
         return `<td><input data-val="${esc(k)}" value="${esc(S.fill.values[k] ?? '')}" ${auto ? 'readonly title="Worked out automatically" style="opacity:.8"' : ''} aria-label="${esc(c.field + ' ' + r)}" inputmode="${/kill|point|pts|score|total|place|rank|#/i.test(c.field) ? 'decimal' : 'text'}"></td>`; }).join('')}</tr>`).join('')}
       </tbody></table></div>
-      ${textCols.length ? `<div class="row"><select id="sort-col" aria-label="Sort column" style="width:auto">${textCols.map(c => `<option ${t.calc && t.calc.target === c.field ? 'selected' : ''}>${esc(c.field)}</option>`).join('')}</select><button class="btn sm" data-act="sort-rows">Sort high to low</button></div>` : ''}
+      ${textCols.length ? `<div class="row"><span class="lab">Order rows by</span><select id="sort-col" aria-label="Sort column" style="width:auto">${textCols.map(c => `<option ${(t.calc ? t.calc.target === c.field : roleOf(c.field) === 'total') ? 'selected' : ''}>${esc(c.field)}</option>`).join('')}</select><button class="btn sm" data-act="sort-rows">Sort high to low</button></div>` : ''}
       ${textCols.length > 1 ? `<details ${t.calc ? 'open' : ''}><summary class="lab" style="cursor:pointer">Auto total ${t.calc ? `· on: ${esc(t.calc.target)} = ${esc(t.calc.from.join(' + '))}` : '· off'}</summary>
+        <p class="help" style="margin-top:6px">Works out one column for you by adding others together, so you never type it. While it's on, that column is locked in the table above.</p>
         <div class="form" style="gap:8px;margin-top:8px">
-          <div class="row"><label class="lab" for="calc-target">Column to fill</label><select id="calc-target" style="width:auto">${textCols.map(c => `<option ${(t.calc ? t.calc.target === c.field : /total/i.test(c.field)) ? 'selected' : ''}>${esc(c.field)}</option>`).join('')}</select></div>
-          <div class="row" id="calc-from"><span class="lab">Add up</span>${textCols.map(c => `<label class="check"><input type="checkbox" value="${esc(c.field)}" ${t.calc && t.calc.from.includes(c.field) ? 'checked' : ''}> ${esc(c.field)}</label>`).join('')}</div>
+          <div class="row"><label class="lab" for="calc-target">Column worked out</label><select id="calc-target" style="width:auto">${textCols.map(c => `<option ${(t.calc ? t.calc.target === c.field : /total/i.test(c.field)) ? 'selected' : ''}>${esc(c.field)}</option>`).join('')}</select></div>
+          <div class="row" id="calc-from"><span class="lab">By adding</span>${textCols.map(c => `<label class="check"><input type="checkbox" value="${esc(c.field)}" ${t.calc && t.calc.from.includes(c.field) ? 'checked' : ''}> ${esc(c.field)}</label>`).join('')}</div>
           <div class="row"><button class="btn sm primary" data-act="calc-toggle" data-on="1">${t.calc ? 'Update' : 'Turn on'}</button>${t.calc ? '<button class="btn sm ghost" data-act="calc-toggle" data-on="0">Turn off</button>' : ''}</div>
         </div></details>` : ''}
-      <details><summary class="lab" style="cursor:pointer">Paste a table instead</summary>
+      <details><summary class="lab" style="cursor:pointer">Type or paste the whole table</summary>
         <p class="help" style="margin:8px 0">Copy rows from a spreadsheet, or type one row per line with commas between columns. Start with a line of column names (${esc(tm.cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}) or keep the column order above. Team names or tags are matched to your Teams.</p>
         <textarea id="paste-rows" placeholder="${esc(tm.cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}"></textarea>
         <div class="row" style="margin-top:8px"><button class="btn primary sm" data-act="paste-rows">Fill the table</button></div>
@@ -959,6 +982,7 @@ function renderFillForm(){
       <div class="bout" id="batch-out"></div></details>`;
   }
   $('#fill-form').innerHTML = html;
+  renderStyleCards();
 }
 function onFillChange(){
   const t = S.cur;
@@ -1402,6 +1426,7 @@ function openDetect(t, img, found, file){
   $('#dt-font').innerHTML = fonts.map(f => `<option ${f === 'Garet' ? 'selected' : ''}>${esc(f)}</option>`).join('');
   $('#dt-weight').innerHTML = [400,500,600,700,800,900].map(w => `<option value="${w}" ${w === 700 ? 'selected' : ''}>${WEIGHT_NAME[w]}</option>`).join('');
   $('#dt-color').value = found.color; $('#dt-colorhex').value = found.color;
+  $('#dt-name').value = t.name || '';
   const marks = found.dashes.length;
   $('#dt-clean').checked = marks > 0; $('#dt-clean').closest('label').classList.toggle('hidden', !marks);
   $('#dt-replace').textContent = t.zones.length ? `This replaces the ${t.zones.length} spot${t.zones.length === 1 ? '' : 's'} already marked.` : '';
@@ -1429,6 +1454,7 @@ async function applyDetect(){
   if (!usedNames.length && !spots.length) { toast('Tick at least one column or spot.', true); return; }
   if (new Set(usedNames.map(norm)).size !== usedNames.length) { toast('Give each column a different name.', true); return; }
   const font = $('#dt-font').value, weight = +$('#dt-weight').value, color = /^#[0-9a-f]{6}$/i.test($('#dt-colorhex').value) ? $('#dt-colorhex').value : $('#dt-color').value, pct = clamp(+$('#dt-size').value || 48, 20, 95) / 100;
+  const nm = ($('#dt-name').value || '').trim(); if (nm) { t.name = nm; $('#ed-name').value = nm; }
   const btn = $('[data-act="detect-apply"]'); btn.disabled = true;
   try {
     if ($('#dt-clean').checked && found.dashes.length) {
@@ -1567,10 +1593,10 @@ function gridsToStats(grids, scoring){
     }
     const roles = heads.map(roleOf);
     if (!roles.includes('team')) { const i = heads.findIndex((h, i) => body.some(r => r[i] && num(r[i]) == null)); if (i >= 0) roles[i] = 'team'; }
-    headersAll.push(...heads.filter((h, i) => !roles[i]));
+    headersAll.push(...heads.filter((h, i) => roles[i] !== 'team' && roles[i] !== 'rank' && h));
     for (const r of body) {
       const rec = {extra: {}};
-      heads.forEach((h, i) => { const v = (r[i] ?? '').toString().trim(); const role = roles[i]; if (role) { if (rec[role] == null || rec[role] === '') rec[role] = v; } else if (h) rec.extra[norm(h)] = v; });
+      heads.forEach((h, i) => { const v = (r[i] ?? '').toString().trim(); const role = roles[i]; if (h && role !== 'team') rec.extra[norm(h)] = v; if (role) { if (rec[role] == null || rec[role] === '') rec[role] = v; } });
       if (!rec.team || num(rec.team) != null && !/[a-z]/i.test(rec.team)) continue;
       rec.team = rec.team.replace(/^\s*#?\d+[.)\-:]\s+/, '').trim();
       if (grids.length > 1 && rec.match == null) rec.match = g.name;
@@ -1615,6 +1641,96 @@ function guessSource(field){
   if (r && STAT_LABEL[r]) return r;
   return 'x:' + norm(field);
 }
+/* OCR text -> table grid (shared with the app) */
+function ocrToGrid(text){
+  const fixNum = t => {
+    const s = t.replace(/[.,:;'"`!|)\]}’‘“”]+$/, '').replace(/^[([{|'"`’‘“”]+/, '');
+    if (!s || s.length > 5) return null;
+    const hasDigit = /\d/.test(s);
+    if (!hasDigit && !/^[Oo]+$/.test(s)) return null;           // plain words are never numbers
+    const m = s.replace(/[Oo°Q]/g, '0').replace(/[Il|!]/g, '1').replace(/[Ss$]/g, '5').replace(/B/g, '8');
+    return /^\d+([.,]\d+)?$/.test(m) ? m.replace(',', '.') : null;
+  };
+  const isWord = t => /[A-Za-z]/.test(t) && (t.match(/[A-Za-z0-9]/g) || []).length / t.length >= .6 && t.length >= 2;
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let header = null; const rows = [];
+  for (const line of lines) {
+    const toks = line.split(/\s+/).filter(Boolean);
+    const roles = toks.map(t => typeof roleOf === 'function' ? roleOf(t.replace(/[^A-Za-z0-9#]/g, '')) : null);
+    if (!header && roles.filter(r => r && r !== 'team').length >= 2) { header = toks.filter((t, i) => roles[i] && roles[i] !== 'team' && roles[i] !== 'rank').map(t => t.replace(/[^A-Za-z0-9 ]/g, '')); continue; }
+    // find name runs (consecutive word tokens)
+    const kinds = toks.map(t => fixNum(t) != null ? 'n' : isWord(t) ? 'w' : 'x');
+    let runs = [], cur = null;
+    kinds.forEach((k, i) => { if (k === 'w') { if (cur && cur.end === i - 1) { cur.end = i; } else { cur = {start: i, end: i}; runs.push(cur); } } });
+    if (!runs.length) continue;
+    const letters = r => toks.slice(r.start, r.end + 1).join('').replace(/[^A-Za-z]/g, '').length;
+    let best = runs.reduce((a, b) => letters(b) > letters(a) ? b : a);
+    let nameToks = toks.slice(best.start, best.end + 1);
+    const caps = t => t === t.toUpperCase() && /[A-Z]/.test(t);
+    while (nameToks.length > 1 && !caps(nameToks[0]) && nameToks.slice(1).every(caps)) { nameToks = nameToks.slice(1); }
+    const name = nameToks.join(' ').replace(/[^\w &.\-']/g, '').trim();
+    if (name.replace(/[^A-Za-z]/g, '').length < 2) continue;
+    const before = toks.slice(0, best.start).map(fixNum).filter(v => v != null);
+    const after = toks.slice(best.end + 1).map(fixNum).filter(v => v != null);
+    if (!after.length) continue;
+    rows.push({rank: before.length ? before[before.length - 1] : null, name, nums: after});
+  }
+  if (!rows.length) return [];
+  // keep rows that look like the table: most have a rank or a common count of numbers
+  const cnt = {}; rows.forEach(r => cnt[r.nums.length] = (cnt[r.nums.length] || 0) + 1);
+  const N = +Object.entries(cnt).sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
+  const withRank = rows.filter(r => r.rank != null).length;
+  let keep = rows.filter(r => Math.abs(r.nums.length - N) <= 1 && (withRank < rows.length * .6 || r.rank != null));
+  const cols = header && header.length === N ? header : Array.from({length: N}, (_, i) => i === N - 1 && N > 1 ? 'Total' : 'Column ' + (i + 2));
+  const grid = [['Rank', 'Team', ...cols]];
+  // a Total column in standings should go down row by row: repair one stray extra digit that breaks the order
+  const tot = keep.map(r => r.nums.length ? r.nums[r.nums.length - 1] : null);
+  for (let i = 0; i < tot.length; i++) {
+    const v = tot[i]; if (v == null) continue; const prev = i ? +tot[i - 1] : Infinity; let next = -Infinity; for (let j = i + 1; j < tot.length; j++) if (tot[j] != null && +tot[j] <= prev) { next = +tot[j]; break; }
+    if (+v <= prev || v.length < 3) continue;
+    const opts = [...v].map((_, k) => v.slice(0, k) + v.slice(k + 1)).filter(x => +x <= prev && +x >= next);
+    if (opts.length) { const fix = opts.sort((p, q) => +q - +p)[0]; keep[i].nums[keep[i].nums.length - 1] = fix; tot[i] = fix; keep[i].fixed = true; }
+  }
+  const tidy = v => /^0\d{2,}$/.test(v) ? v.replace(/^0+(?=\d{2})/, '') : v;
+  for (const r of keep) { r.nums = r.nums.map(tidy); const nums = r.nums.slice(); while (nums.length > N) { let k = -1, best = 99; nums.forEach((v, i) => { if (i > 0 && i < nums.length - 1 && v.length < best) { best = v.length; k = i; } }); nums.splice(k < 0 ? 0 : k, 1); } grid.push([r.rank ?? '', r.name, ...nums, ...Array(Math.max(0, N - nums.length)).fill('')]); }
+  return grid;
+}
+
+/* on-device screenshot reading (works on any website, no account needed) */
+async function prepForOcr(file){
+  const url = URL.createObjectURL(file);
+  try {
+    const im = new Image(); im.src = url; await im.decode();
+    const k = Math.min(3, Math.max(1, 1800 / im.naturalWidth));
+    const cv = document.createElement('canvas'); cv.width = Math.round(im.naturalWidth * k); cv.height = Math.round(im.naturalHeight * k);
+    const cx = cv.getContext('2d', {willReadFrequently: true}); cx.drawImage(im, 0, 0, cv.width, cv.height);
+    const id = cx.getImageData(0, 0, cv.width, cv.height), d = id.data; let sum = 0, lo = 255, hi = 0;
+    for (let i = 0; i < d.length; i += 4) { const l = .299 * d[i] + .587 * d[i+1] + .114 * d[i+2]; d[i] = l; sum += l; }
+    const dark = sum / (d.length / 4) < 110;
+    for (let i = 0; i < d.length; i += 4) { let l = d[i]; if (dark) l = 255 - l; d[i] = l; if (l < lo) lo = l; if (l > hi) hi = l; }
+    const span = Math.max(1, hi - lo);
+    for (let i = 0; i < d.length; i += 4) { const l = (d[i] - lo) * 255 / span; d[i] = d[i+1] = d[i+2] = l; d[i+3] = 255; }
+    cx.putImageData(id, 0, 0); return cv;
+  } finally { URL.revokeObjectURL(url); }
+}
+async function ocrImages(files){
+  if (!window.Tesseract) { setImportMsg('Getting the screenshot reader ready (first time only)…'); await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'); }
+  let idx = 0;
+  const worker = await Tesseract.createWorker('eng', 1, {logger: m => { if (m.status === 'recognizing text') setImportMsg(`Reading screenshot ${idx + 1} of ${files.length}… ${Math.round(m.progress * 100)}%`); }});
+  try {
+    await worker.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'});
+    let all = [];
+    for (; idx < files.length; idx++) {
+      const cv = await prepForOcr(files[idx]);
+      const {data} = await worker.recognize(cv);
+      const g = ocrToGrid(data.text || '');
+      if (g.length > 1) all = all.length ? all.concat(g.slice(1)) : g;
+    }
+    if (!all.length) throw new Error('no results table could be read from the screenshot. Try a sharper, uncropped screenshot.');
+    return [{name: 'screenshot', grid: all, ocr: true}];
+  } finally { try { await worker.terminate(); } catch (e) {} }
+}
+
 async function importFiles(files){
   files = [...(files || [])]; if (!files.length) return;
   const t = S.cur, sc = t.scoring || defaultScoring();
@@ -1630,7 +1746,12 @@ async function importFiles(files){
       else { const g = parseTable(await f.text()); if (g.length) grids.push({name: f.name.replace(/\.[^.]+$/, ''), grid: g}); }
     }
     if (grids.length > 1 && !grids.every(g => g.grid[0].map(roleOf).includes('match'))) { /* several files/sheets = several matches */ }
-    if (imgs.length) grids.push(...await readWithClaude(imgs, null));
+    if (imgs.length) {
+      let read = null;
+      if (S.sample) { try { read = await readWithClaude(imgs, null); } catch (e) { toast(errMsg(e) + ' Reading it on this device instead…'); } }
+      if (!read) read = await ocrImages(imgs);
+      grids.push(...read);
+    }
   } catch (e) { setImportMsg(''); toast('Could not read that file: ' + errMsg(e), true); return; }
   showImport(gridsToStats(grids, sc), grids);
 }
@@ -1676,18 +1797,34 @@ function showImport(st, grids){
   const t = S.cur, tm = tableModel(t), box = $('#imp-result'); IM = {st, grids};
   setImportMsg('');
   if (!st.teams.length) { box.innerHTML = '<p class="help">No team rows were found. Make sure each row has a team name.</p>'; return; }
-  const srcs = [['', '— leave as it is —'], ...Object.entries(STAT_LABEL).filter(([k]) => k === 'rank' || st.teams.some(x => x[k])).map(([k, l]) => [k, l]), ...st.headers.map(h => ['x:' + norm(h), 'From file: ' + h])];
+  const ocr = grids.some(g => g.ocr);
+  const heads = st.headers.filter(h => !/^rank$/i.test(h));
+  const srcs = [['', '— leave as it is —'], ...Object.entries(STAT_LABEL).filter(([k]) => k === 'rank' || st.teams.some(x => x[k])).map(([k, l]) => [k, l]), ...heads.map(h => ['x:' + norm(h), 'Column in your results: ' + h])];
   const saved = t.importMap || {};
   const cols = tm.cols.filter(c => c.kind === 'text');
-  box.innerHTML = `<p class="help"><b>${st.teams.length} teams</b> read${st.mode === 'matches' ? ` from <b>${st.nMatches || 'several'} match${st.nMatches === 1 ? '' : 'es'}</b>, added up with your scoring rules` : ' as final standings'}, sorted by Total. ${st.notes.join(' ')}</p>
-    <div class="tablewrap"><table><thead><tr><th>#</th><th>Team</th><th>Wins</th><th>Kills</th><th>KP</th><th>PP</th><th>Total</th></tr></thead><tbody>${st.teams.slice(0, 20).map(x => `<tr><td class="n">${x.rank}</td><td>${esc(x.team)}${matchTeam(x.team) && matchTeam(x.team).id ? '' : ' <span class="chip">no logo</span>'}</td><td>${x.wins}</td><td>${x._hasKills ? x.kills : '–'}</td><td>${x.kp}</td><td>${x.pp}</td><td><b>${x.total}</b></td></tr>`).join('')}</tbody></table></div>
-    ${cols.length ? `<div class="form" style="gap:8px"><span class="lab">What goes in each column of your template</span>${cols.map((c, i) => { const g = saved[c.field] ?? guessSource(c.field); return `<div class="row" style="flex-wrap:nowrap"><span style="min-width:90px;font-weight:700">${esc(c.field)}</span><select id="imp-map-${i}" data-field="${esc(c.field)}" aria-label="Source for ${esc(c.field)}">${srcs.map(([v, l]) => `<option value="${esc(v)}" ${v === g ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`; }).join('')}</div>` : ''}
+  // when the results have no column names, line columns up by position
+  const generic = heads.length && heads.every(h => /^column \d+$|^total$/i.test(h));
+  const numHeads = heads.filter(h => !/^total$/i.test(h));
+  const guess = (c, i) => {
+    if (saved[c.field] != null && srcs.some(s2 => s2[0] === saved[c.field])) return saved[c.field];
+    const r = roleOf(c.field);
+    if (r === 'total' && heads.some(h => /^total$/i.test(h))) return 'x:total';
+    if (generic) { const nonTotal = cols.filter(cc => roleOf(cc.field) !== 'total'); const k = nonTotal.indexOf(c); return k >= 0 && numHeads[numHeads.length - nonTotal.length + k] ? 'x:' + norm(numHeads[numHeads.length - nonTotal.length + k]) : ''; }
+    const g = guessSource(c.field);
+    return srcs.some(s2 => s2[0] === g) ? g : (r && st.teams.some(x => x[r]) ? r : '');
+  };
+  const previewCols = st.mode === 'matches' ? [['Wins', x => x.wins], ['Kills', x => x._hasKills ? x.kills : '–'], ['KP', x => x.kp], ['PP', x => x.pp], ['Total', x => x.total]] : heads.map(h => [h, x => x.extra[norm(h)] ?? '']);
+  box.innerHTML = `<p class="help"><b>${st.teams.length} teams</b> read${st.mode === 'matches' ? ` from <b>${st.nMatches || 'several'} match${st.nMatches === 1 ? '' : 'es'}</b>, added up with your scoring rules` : ''}, sorted by Total. ${ocr ? '<b>Read from a screenshot: check the names and numbers below.</b> You can correct anything in the table afterwards.' : ''} ${st.notes.join(' ')}</p>
+    <div class="tablewrap"><table><thead><tr><th>#</th><th>Team</th>${previewCols.map(([h]) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${st.teams.slice(0, 24).map(x => `<tr><td class="n">${x.rank}</td><td>${esc(x.team)}${(() => { const m = matchTeam(x.team); return m && m.id ? (norm(m.name) !== norm(x.team) ? ` <span class="chip lime">→ ${esc(m.name)}</span>` : '') : ' <span class="chip">no logo</span>'; })()}</td>${previewCols.map(([, f]) => `<td>${esc(f(x))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    ${cols.length ? `<div class="form" style="gap:8px"><span class="lab">Which result goes in each column of your template</span>${cols.map((c, i) => { const g = guess(c, i); return `<div class="row" style="flex-wrap:nowrap"><span style="min-width:90px;font-weight:700">${esc(c.field)}</span><select id="imp-map-${i}" data-field="${esc(c.field)}" aria-label="Source for ${esc(c.field)}">${srcs.map(([v, l]) => `<option value="${esc(v)}" ${v === g ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`; }).join('')}</div>` : ''}
     <div class="row"><button class="btn primary" data-act="imp-apply">Put these on the graphic</button><span class="muted small">${st.teams.length > tm.rows.length ? `Top ${tm.rows.length} fit this template.` : ''}</span></div>`;
 }
 function applyImport(){
   const t = S.cur, tm = tableModel(t), st = IM && IM.st; if (!st) return;
   const map = {}; $$('#imp-result select[data-field]').forEach(s => { map[s.dataset.field] = s.value; });
   t.importMap = map;
+  let calcNote = '';
+  if (t.calc && map[t.calc.target]) { t.calc = null; calcNote = ' Auto total was turned off because the totals came from your results.'; }
   const teamCol = tm.cols.find(c => c.kind === 'team');
   tm.rows.forEach((r, i) => {
     const x = st.teams[i];
@@ -1703,7 +1840,7 @@ function applyImport(){
   });
   if (!teamCol) toast('This template has no team column, so only the numbers were filled.');
   queueSave(t); renderFillForm(); onFillChange();
-  toast(`Filled ${Math.min(st.teams.length, tm.rows.length)} rows. Check the preview, then download.`);
+  toast(`Filled ${Math.min(st.teams.length, tm.rows.length)} rows. Check the preview, then download.${calcNote}`);
 }
 function scoringCard(t){
   const sc = t.scoring || defaultScoring();
@@ -1732,8 +1869,8 @@ function saveScoring(){
 function importCard(t){
   const canAI = !!S.sample;
   return `<section class="card hot" id="imp-card"><h3>Import results</h3>
-    <p class="help">Drop in the results and the table fills itself. Spreadsheets (Excel, Google Sheets download, CSV), JSON, pasted text${canAI ? ', or screenshots of result screens and standings' : ''}. Works with final standings or match-by-match results from any game.</p>
-    <div class="row"><label class="btn primary file-btn" for="imp-file"><input type="file" id="imp-file" multiple accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.ods,.json${canAI ? ',image/png,image/jpeg,image/webp' : ''}">Choose files</label><span class="muted small" id="imp-msg"></span></div>
+    <p class="help">Drop in the results and the table fills itself. Screenshots of result screens or standings, spreadsheets (Excel, Google Sheets download, CSV), JSON or pasted text. Works with final standings or match-by-match results from any game.</p>
+    <div class="row"><label class="btn primary file-btn" for="imp-file"><input type="file" id="imp-file" multiple accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.ods,.json,image/png,image/jpeg,image/webp">Choose files</label><span class="muted small" id="imp-msg"></span></div>
     <details><summary class="lab" style="cursor:pointer">Or paste results</summary>
       <textarea id="imp-text" placeholder="Team, Booyah, Kills, PP, Total&#10;Lagos Lions, 2, 45, 60, 105&#10;…&#10;&#10;or match by match:&#10;Match, Team, Placement, Kills&#10;1, Lagos Lions, 1, 12"></textarea>
       <div class="row" style="margin-top:8px"><button class="btn sm" data-act="imp-text">Read pasted results</button>${canAI ? '<span class="muted small">Messy text (like a WhatsApp message) is read by Claude.</span>' : ''}</div>
@@ -1741,6 +1878,56 @@ function importCard(t){
     ${scoringCard(t)}
     <div id="imp-result"></div></section>`;
 }
+
+
+/* ---------- text style for many spots at once ---------- */
+S.styleScope = '*';
+const TEXT_TYPES = ['text', 'teamName', 'teamTag'];
+function styleScopes(t){
+  const fields = [...new Set(t.zones.filter(z => TEXT_TYPES.includes(z.type)).map(z => z.field))];
+  return [['*', 'All text on the graphic'], ...fields.map(f => [f, f + (t.zones.some(z => z.field === f && z.row > 0) ? ' column' : '')])];
+}
+function scopeZones(t, sc){ return t.zones.filter(z => TEXT_TYPES.includes(z.type) && (sc === '*' || z.field === sc)); }
+function styleCardHTML(t){
+  const zs = scopeZones(t, S.styleScope); if (!t.zones.some(z => TEXT_TYPES.includes(z.type))) return '';
+  if (!zs.length) S.styleScope = '*';
+  const z = scopeZones(t, S.styleScope)[0] || {};
+  const fonts = allFontNames(); if (z.font && !fonts.includes(z.font)) fonts.unshift(z.font);
+  const same = k => scopeZones(t, S.styleScope).every(o => o[k] === z[k]);
+  return `<div class="form" style="gap:10px">
+    <div class="field"><label for="st-scope">Change</label><select id="st-scope">${styleScopes(t).map(([v, l]) => `<option value="${esc(v)}" ${v === S.styleScope ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+    <div class="grid2">
+      <div class="field"><label for="st-font">Font</label><select id="st-font">${same('font') ? '' : '<option value="">Mixed</option>'}${fonts.map(f => `<option ${same('font') && f === z.font ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></div>
+      <div class="field"><label for="st-weight">Weight</label><select id="st-weight">${same('weight') ? '' : '<option value="">Mixed</option>'}${[300,400,500,600,700,800,900].map(w => `<option value="${w}" ${same('weight') && +z.weight === w ? 'selected' : ''}>${WEIGHT_NAME[w]}</option>`).join('')}</select></div>
+      <div class="field"><label for="st-size">Text size (px)</label><input id="st-size" type="number" min="4" value="${same('size') ? z.size : ''}" placeholder="Mixed"></div>
+      <div class="field"><label for="st-color">Colour</label><div class="row" style="flex-wrap:nowrap"><input type="color" id="st-color" value="${esc(z.color || '#ffffff')}" aria-label="Colour picker"><input id="st-colorhex" value="${same('color') ? esc(z.color) : ''}" placeholder="Mixed" aria-label="Colour code"></div></div>
+      <div class="field"><label for="st-align">Align</label><select id="st-align">${same('align') ? '' : '<option value="">Mixed</option>'}${['left','center','right'].map(a => `<option value="${a}" ${same('align') && z.align === a ? 'selected' : ''}>${a[0].toUpperCase() + a.slice(1)}</option>`).join('')}</select></div>
+      <div class="field"><label for="st-sw">Outline (px)</label><div class="row" style="flex-wrap:nowrap"><input id="st-sw" type="number" min="0" value="${same('sw') ? (z.sw || 0) : ''}" placeholder="Mixed"><input type="color" id="st-sc" value="${esc(z.sc || '#000000')}" aria-label="Outline colour"></div></div>
+    </div>
+    <div class="row"><label class="check"><input type="checkbox" id="st-upper" ${z.upper ? 'checked' : ''}> CAPITALS</label><label class="check"><input type="checkbox" id="st-fit" ${z.fit !== false ? 'checked' : ''}> Shrink long text to fit</label></div>
+    <p class="help">Changes apply straight away to every spot in the choice above. To style one spot on its own, tap it in Mark spots.</p>
+  </div>`;
+}
+function renderStyleCards(){
+  const t = S.cur; if (!t) return;
+  for (const id of ['#style-fill', '#style-ed']) { const el = $(id); if (el) el.innerHTML = styleCardHTML(t); }
+}
+function onStyleInput(e){
+  const id = e.target.id; if (!id || !id.startsWith('st-') || !S.cur) return;
+  const t = S.cur;
+  if (id === 'st-scope') { S.styleScope = e.target.value; renderStyleCards(); return; }
+  const map = {'st-font': 'font', 'st-weight': 'weight', 'st-size': 'size', 'st-color': 'color', 'st-colorhex': 'color', 'st-align': 'align', 'st-sw': 'sw', 'st-sc': 'sc', 'st-upper': 'upper', 'st-fit': 'fit'};
+  const k = map[id]; if (!k) return;
+  let v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  if (v === '' ) return;
+  if (['weight', 'size', 'sw'].includes(k)) { v = Number(v); if (!isFinite(v) || (k === 'size' && v < 4)) return; }
+  if (k === 'color' || k === 'sc') { if (!/^#[0-9a-f]{6}$/i.test(v)) return; if (k === 'color') { $('#st-color').value = v; $('#st-colorhex').value = v; } }
+  scopeZones(t, S.styleScope).forEach(z => { z[k] = v; });
+  queueSave(t);
+  if (S.view === 'fill') previewFill(); else previewEditor();
+}
+document.addEventListener('input', onStyleInput);
+document.addEventListener('change', e => { if (e.target.id === 'st-scope' || e.target.tagName === 'SELECT' || e.target.type === 'checkbox') onStyleInput(e); });
 
 /* ---------- teams ---------- */
 function renderTeams(){
@@ -1836,6 +2023,12 @@ async function act(a, el){
     case 'open-edit': { const t = tplById(id); if (t) openEditor(t); break; }
     case 'to-fill': if (S.cur) openFill(S.cur); break;
     case 'to-edit': if (S.cur) openEditor(S.cur); break;
+    case 'rename-tpl': { const t = S.templates.find(x => x.id === id); const box = $('#tn-' + CSS.escape(id)); if (!t || !box) break;
+      box.innerHTML = `<input id="tn-in-${esc(id)}" value="${esc(t.name)}" aria-label="Template name" style="text-transform:none;font-family:var(--body);font-weight:600;font-size:1rem">`;
+      const inp = box.querySelector('input'); inp.focus(); inp.select();
+      const done = () => { const v = inp.value.trim(); if (v && v !== t.name) { t.name = v; queueSaveNow(t); toast('Renamed to ' + v); } renderTemplates(); };
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') { inp.value = t.name; inp.blur(); } });
+      inp.addEventListener('blur', done, {once: true}); break; }
     case 'dup-tpl': { const o = tplById(id); if (!o) break; const t = JSON.parse(JSON.stringify(o)); t.id = uid(); t.name = o.name + ' copy'; t.createdAt = t.updatedAt = Date.now(); t.zones.forEach(z => z.id = uid());
       try { await S.store.put('templates', t.id, t); S.templates.unshift(t); renderTemplates(); toast('Duplicated. Use Replace design image to swap in another design with the same spots.'); } catch (e) { toast('Could not duplicate: ' + errMsg(e), true); } break; }
     case 'del-tpl': { const t = S.templates.find(x => x.id === id); if (!t) break;
