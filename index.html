@@ -951,6 +951,11 @@ function renderFillForm(){
   if (tm.rows.length) {
     const textCols = tm.cols.filter(c => c.kind === 'text');
     html += `<section class="card"><h3>Table</h3>
+      <details><summary class="btn sm" style="cursor:pointer;list-style:none;display:inline-flex">Type or paste the whole table</summary>
+        <p class="help" style="margin:8px 0">Copy rows from a spreadsheet, or type one row per line with commas between columns. Start with a line of column names (${esc(tm.cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}) or keep the column order above. Team names or tags are matched to your Teams.</p>
+        <textarea id="paste-rows" placeholder="${esc(tm.cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}"></textarea>
+        <div class="row" style="margin-top:8px"><button class="btn primary sm" data-act="paste-rows">Fill the table</button></div>
+      </details>
       <div class="tablewrap"><table><thead><tr><th>#</th>${tm.cols.map(c => `<th>${esc(c.field)}</th>`).join('')}</tr></thead><tbody>
       ${tm.rows.map(r => `<tr><td class="n">${r}</td>${tm.cols.map(c => { const k = c.field + '|' + r; if (!tm.has.has(k)) return '<td class="muted">–</td>';
         if (c.kind === 'team') return `<td>${teamSelect(k)}</td>`;
@@ -966,15 +971,12 @@ function renderFillForm(){
           <div class="row" id="calc-from"><span class="lab">By adding</span>${textCols.map(c => `<label class="check"><input type="checkbox" value="${esc(c.field)}" ${t.calc && t.calc.from.includes(c.field) ? 'checked' : ''}> ${esc(c.field)}</label>`).join('')}</div>
           <div class="row"><button class="btn sm primary" data-act="calc-toggle" data-on="1">${t.calc ? 'Update' : 'Turn on'}</button>${t.calc ? '<button class="btn sm ghost" data-act="calc-toggle" data-on="0">Turn off</button>' : ''}</div>
         </div></details>` : ''}
-      <details><summary class="lab" style="cursor:pointer">Type or paste the whole table</summary>
-        <p class="help" style="margin:8px 0">Copy rows from a spreadsheet, or type one row per line with commas between columns. Start with a line of column names (${esc(tm.cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}) or keep the column order above. Team names or tags are matched to your Teams.</p>
-        <textarea id="paste-rows" placeholder="${esc(tm.cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}"></textarea>
-        <div class="row" style="margin-top:8px"><button class="btn primary sm" data-act="paste-rows">Fill the table</button></div>
-      </details></section>`;
+</section>`;
   }
   if (t.zones.length) {
     const hd = batchHeaders(t).map(h => h.label);
     html += `<details class="card" id="batch"><summary>Many graphics at once</summary>
+      <p class="help"><b>Not for filling this table.</b> Each line here becomes its own separate graphic (for example one per match). To fill the table above, use <b>Type or paste the whole table</b>.</p>
       <p class="help">One line per graphic, for a whole match day in one go. The first line must be the column names below. Anything you leave out uses what's filled in above.</p>
       <div class="row"><code style="overflow-wrap:anywhere">${esc(hd.join(', '))}</code><button class="btn sm" data-act="copy-headers">Copy</button></div>
       <textarea id="batch-in" placeholder="${esc(hd.join(', '))}"></textarea>
@@ -1050,7 +1052,15 @@ async function batchMake(){
   const t = S.cur, grid = parseTable($('#batch-in').value);
   if (grid.length < 2) { toast('Add the column names line, then one line per graphic.', true); return; }
   const hd = batchHeaders(t), map = grid[0].map(h => hd.find(x => norm(x.label) === norm(h)) || null);
-  if (!map.some(Boolean)) { toast('The first line must use the column names shown above.', true); return; }
+  if (!map.some(Boolean)) {
+    const tm = tableModel(t), cn = tm.cols.map(c => norm(c.field));
+    if (tm.rows.length && grid[0].some(h => cn.includes(norm(h)))) {
+      $('#paste-rows').value = $('#batch-in').value; $('#batch-in').value = '';
+      pasteRows(); toast('That was a standings table, so it went into the table above instead.'); $('#fill-form .card .tablewrap')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+      return;
+    }
+    toast('The first line must use the column names shown above.', true); return;
+  }
   S.batch.forEach(b => URL.revokeObjectURL(b.url)); S.batch = [];
   const out = $('#batch-out'); out.innerHTML = ''; $('#zip-btn').classList.add('hidden');
   const missing = new Set(), used = {};
