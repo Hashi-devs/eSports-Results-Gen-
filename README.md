@@ -13,7 +13,6 @@ Results graphics for esports tournaments, from any game. Upload your finished de
 - **Teams library** with logos. Add many at once from logo files named after each team.
 - **Import results** from Excel, CSV/TSV, Google Sheets downloads, JSON or pasted text, as final standings or match by match. Match-by-match results are added up with editable scoring rules (points per kill, placement points table).
 - **Auto total and sorting** (for example Total = KP + PP, sorted high to low).
-- **Many graphics at once** from one table, downloaded as a zip.
 - **Garet** (Book and Heavy) is built in. Upload any other fonts in the Fonts tab.
 
 ## Running it

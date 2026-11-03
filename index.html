@@ -973,16 +973,6 @@ function renderFillForm(){
         </div></details>` : ''}
 </section>`;
   }
-  if (t.zones.length) {
-    const hd = batchHeaders(t).map(h => h.label);
-    html += `<details class="card" id="batch"><summary>Many graphics at once</summary>
-      <p class="help"><b>Not for filling this table.</b> Each line here becomes its own separate graphic (for example one per match). To fill the table above, use <b>Type or paste the whole table</b>.</p>
-      <p class="help">One line per graphic, for a whole match day in one go. The first line must be the column names below. Anything you leave out uses what's filled in above.</p>
-      <div class="row"><code style="overflow-wrap:anywhere">${esc(hd.join(', '))}</code><button class="btn sm" data-act="copy-headers">Copy</button></div>
-      <textarea id="batch-in" placeholder="${esc(hd.join(', '))}"></textarea>
-      <div class="row"><button class="btn primary" data-act="batch-make">Make graphics</button><button class="btn hidden" data-act="batch-zip" id="zip-btn">Download all (.zip)</button><span class="muted small" id="batch-msg"></span></div>
-      <div class="bout" id="batch-out"></div></details>`;
-  }
   $('#fill-form').innerHTML = html;
   renderStyleCards();
 }
