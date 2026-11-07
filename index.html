@@ -45,13 +45,15 @@ a{color:var(--accent)}
 .ticker .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--live);margin-right:7px;vertical-align:1px;box-shadow:0 0 0 3px rgba(255,59,74,.25)}
 .top{position:sticky;top:0;z-index:20;background:rgba(7,9,13,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .top-in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.brand{display:flex;align-items:center;gap:10px;margin-right:auto}
-.mark{width:32px;height:32px;color:var(--accent);flex:none}
-.brand h1{font-size:1.35rem;letter-spacing:0;font-family:var(--display);font-weight:400}
+.brand{display:flex;align-items:center;gap:9px;margin-right:auto;min-width:0}
+.mark{width:26px;height:26px;color:var(--accent);flex:none}
+.brand h1{font-size:1rem;letter-spacing:.04em;line-height:1;font-family:var(--display);font-weight:400;white-space:nowrap}
 .brand h1 b{color:var(--accent);font-weight:400}
-.badge{font-family:var(--label);font-weight:700;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
-.badge.cloud{border-color:rgba(61,220,151,.45);color:var(--ok)}
-.badge.local{border-color:rgba(255,181,71,.5);color:var(--warn)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none;box-shadow:0 0 0 3px rgba(143,163,155,.15)}
+.dot.cloud{background:var(--ok);box-shadow:0 0 0 3px rgba(61,220,151,.18)}
+.dot.local{background:var(--warn);box-shadow:0 0 0 3px rgba(255,181,71,.18)}
+.dot.saving{animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
 .tabs{display:flex;gap:2px}
 .tabs a{padding:9px 14px;text-decoration:none;color:var(--muted);font-family:var(--label);font-weight:800;font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;border-bottom:2px solid transparent}
 .tabs a:hover{color:var(--text)}
@@ -98,12 +100,14 @@ details>summary.lab::marker{color:var(--accent)}
 code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;background:#0a0d12;border:1px solid var(--line);padding:2px 6px}
 
 /* templates page */
-.hero{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:22px;align-items:end;margin-bottom:22px}
-.hero h2{font-size:clamp(2.3rem,10vw,3.8rem);line-height:1.08;margin:0}
-.hero .kicker{display:block;margin:0 0 14px;line-height:1.5}
-.hero h2 span{display:block;margin-top:2px}
-.hero .sub{margin-top:18px;color:var(--muted);max-width:52ch;line-height:1.6}
-.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.hero{display:block;margin:6px 0 26px}
+.hero h2{font-size:clamp(2.1rem,8.6vw,5.2rem);line-height:1.28;margin:0;letter-spacing:.01em}
+.hero .kicker{display:block;margin:0 0 16px;line-height:1.5}
+.hero h2 span{display:block}
+.hero .sub{margin-top:18px;color:var(--muted);max-width:60ch;line-height:1.65}
+@media (min-width: 901px){ .hero h2 span{display:inline} .hero .sub{font-size:1.05rem} }
+.stats{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:18px;font-size:.82rem;color:var(--muted)}
+.stats b{color:var(--text);font-weight:800;font-variant-numeric:tabular-nums;margin-right:4px}
 .stat{background:var(--panel);border:1px solid var(--line);padding:12px;clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%)}
 .stat b{display:block;font-family:var(--display);font-weight:400;font-size:2rem;margin-bottom:4px;line-height:1;font-variant-numeric:tabular-nums}
 .stat span{font-family:var(--label);font-weight:700;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
@@ -215,7 +219,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
 <body>
 <header class="top">
   <div class="top-in">
-    <div class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M28 17V4H4v24h13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="square" stroke-linejoin="miter"/><path d="M10 22V12.5l3.4 3.9L16 10.5l2.6 5.9 3.4-3.9V22z" fill="currentColor"/></svg><h1>Match Day <b>Studio</b></h1><span id="store-badge" class="badge">Loading…</span></div>
+    <div class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M28 17V4H4v24h13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="square" stroke-linejoin="miter"/><path d="M10 22V12.5l3.4 3.9L16 10.5l2.6 5.9 3.4-3.9V22z" fill="currentColor"/></svg><h1>Match Day <b>Studio</b></h1><span id="store-badge" class="dot" role="img" aria-label="Loading" title="Loading"></span></div>
     <nav class="tabs" aria-label="Sections">
       <a href="#templates" data-tab="templates" class="on">Templates</a>
       <a href="#teams" data-tab="teams">Teams</a>
@@ -232,9 +236,9 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
         <p class="kicker">Results graphics · Any game</p>
         <h2>Fill the table. <span class="lime">Post the results.</span></h2>
         <p class="sub">Upload your design once. The spots are found for you, results come in from a spreadsheet or a screenshot, and the graphic comes out at full quality.</p>
-        <div class="row" style="margin-top:16px"><label class="btn primary file-btn" for="tpl-upload"><input type="file" id="tpl-upload" accept="image/png,image/jpeg,image/webp">Upload template design</label></div>
+        <div class="row" style="margin-top:20px"><label class="btn primary file-btn" for="tpl-upload"><input type="file" id="tpl-upload" accept="image/png,image/jpeg,image/webp">Upload template design</label></div>
+        <p class="stats" id="stats"></p>
       </div>
-      <div class="stats" id="stats"></div>
     </div>
     <div class="steps">
       <div class="step"><b>01</b><span><strong>Upload</strong>Your finished design at full size, with dashes, placeholder text or empty cells where results go.</span></div>
@@ -423,6 +427,10 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const keyOf = z => (z.field || '') + '|' + (z.row || 0);
 const isTeamType = t => t === 'teamName' || t === 'teamTag' || t === 'teamLogo';
 const errMsg = e => (e && (e.message || e.code)) || 'Something went wrong';
+/* run at most once per frame-ish while changes keep coming, and once more at the end */
+function throttle(fn, ms){ let t = null, pending = false, busy = false;
+  const run = async () => { if (busy) { pending = true; return; } busy = true; pending = false; try { await fn(); } finally { busy = false; t = setTimeout(() => { t = null; if (pending) run(); }, ms); } };
+  return () => { if (t || busy) { pending = true; return; } run(); }; }
 function debounce(fn, ms){ let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 let toastT;
 function toast(msg, bad){ const el = $('#toast'); el.textContent = msg; el.className = bad ? 'bad' : ''; clearTimeout(toastT); toastT = setTimeout(() => el.classList.add('hidden'), bad ? 6000 : 3200); }
@@ -558,16 +566,13 @@ function setTextFont(ctx, z, s){ const size0 = z.size || Math.round(z.h * .8); c
 function fitSize(ctx, z, text){
   const t = z.upper ? text.toUpperCase() : text, size0 = z.size || Math.round(z.h * .8);
   if (z.fit === false) return size0;
-  let size = size0, guard = 0;
   ctx.save();
-  for (;;) {
-    setTextFont(ctx, z, size);
-    const w = ctx.measureText(t).width, cap = ctx.measureText('H').actualBoundingBoxAscent || size * .7;
-    if ((w * SQUEEZE <= z.w && cap <= z.h) || size <= 4 || guard++ > 80) break;
-    size = Math.max(4, size * Math.min(.97, w * SQUEEZE > z.w ? z.w / (w * SQUEEZE) : .97));
-  }
+  setTextFont(ctx, z, size0);
+  const w = ctx.measureText(t).width, cap = ctx.measureText('H').actualBoundingBoxAscent || size0 * .7;
   ctx.restore();
-  return size;
+  // width and cap height grow in proportion to the size, so one measurement is enough
+  const k = Math.min(1, w * SQUEEZE > z.w ? z.w / (w * SQUEEZE) : 1, cap > z.h ? z.h / cap : 1);
+  return Math.max(4, Math.floor(size0 * k * 100) / 100);
 }
 function drawText(ctx, z, text, sizeIn){
   if (!text) return;
@@ -667,8 +672,10 @@ function route(){
 }
 function setBadge(){
   const b = $('#store-badge');
-  if (S.store.mode === 'cloud') { b.textContent = 'Saved online'; b.className = 'badge cloud'; b.title = 'Templates, teams and fonts are saved with this page, so they work on any device you open it on.'; }
-  else { b.textContent = 'Saved on this device'; b.className = 'badge local'; b.title = 'Your templates, teams and fonts are kept in this browser on this device. Nobody else can see them.'; }
+  const cloud = S.store.mode === 'cloud';
+  b.className = 'dot ' + (cloud ? 'cloud' : 'local');
+  const label = cloud ? 'Saved online: works on any device you open this page on' : 'Saved on this device: kept in this browser only';
+  b.title = label; b.setAttribute('aria-label', label);
 }
 
 /* ---------- templates list ---------- */
@@ -677,7 +684,8 @@ function renderTemplates(){
   $('#tpl-note').innerHTML = '';
   if (!S.store) return;
   const made = (() => { try { return +localStorage.getItem('mds-made') || 0; } catch (e) { return 0; } })();
-  $('#stats').innerHTML = [[S.templates.length, 'Templates'], [S.teams.length, 'Teams'], [S.templates.reduce((n, t) => n + t.zones.length, 0), 'Spots marked'], [made, 'Graphics made']].map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
+  const pl = (n, a, b) => `<span><b>${n}</b>${n === 1 ? a : b}</span>`;
+  $('#stats').innerHTML = pl(S.templates.length, 'template', 'templates') + pl(S.teams.length, 'team', 'teams') + pl(S.templates.reduce((n, t) => n + t.zones.length, 0), 'spot marked', 'spots marked') + pl(made, 'graphic made', 'graphics made');
   if (!list.length) { $('#tpl-grid').innerHTML = `<div class="empty" style="grid-column:1/-1"><p class="kicker" style="margin-bottom:8px">No templates yet</p><p>Upload your finished results design to start. PNG at full size works best.</p><div class="row" style="justify-content:center;margin-top:14px"><label class="btn primary file-btn" for="tpl-upload2"><input type="file" id="tpl-upload2" accept="image/png,image/jpeg,image/webp">Upload your design</label></div></div>`; $('#tpl-upload2').addEventListener('change', e => { uploadTemplate(e.target.files[0]); e.target.value = ''; }); return; }
   $('#tpl-grid').innerHTML = list.map(t => `
     <article class="tcard" data-id="${esc(t.id)}">
@@ -720,7 +728,7 @@ async function uploadTemplate(file){
 const zoneById = id => S.cur && S.cur.zones.find(z => z.id === id);
 const selZone = () => S.sel ? zoneById(S.sel) : null;
 const saveT = {}, saving = {};
-function setStatus(s){ $('#ed-status').textContent = s; }
+function setStatus(s){ $('#ed-status').textContent = s; const d = $('#store-badge'); if (d && S.store) d.classList.toggle('saving', /Saving/.test(s)); }
 function queueSave(t){
   if (t.example) { setStatus('Example: changes are not saved'); return; }
   t.updatedAt = Date.now(); setStatus('Saving…');
@@ -761,7 +769,7 @@ function renderChips(){
 }
 function updateDrawBtn(){ const b = $('#draw-btn'); b.classList.toggle('on', S.drawMode); b.textContent = S.drawMode ? 'Drag over the design…' : '＋ Draw spot'; $('#ed-overlay').classList.toggle('drawing', S.drawMode); }
 function selectZone(id){ S.sel = id; renderBoxes(); renderPanel(); renderChips(); }
-const previewEditor = debounce(() => { if (S.cur && S.view === 'edit') renderTo($('#ed-canvas'), S.cur, {values:{}, teams:{}, images:{}}, {preview: true}); }, 60);
+const previewEditor = throttle(() => (S.cur && S.view === 'edit') ? renderTo($('#ed-canvas'), S.cur, {values:{}, teams:{}, images:{}}, {preview: true}) : null, 50);
 function fieldNames(){ return [...new Set((S.cur ? S.cur.zones : []).map(z => z.field).filter(Boolean))]; }
 function nextField(type){
   const used = new Set(S.cur.zones.map(z => z.field));
@@ -962,7 +970,7 @@ function rankedFill(t, data){
   tm.rows.forEach((r, i) => tm.cols.forEach(c => { const k = c.field + '|' + r, x = order[i].cells[c.field]; set(out.values, k, x.v); set(out.teams, k, x.t); set(out.images, k, x.im); }));
   return out;
 }
-const previewFill = debounce(() => { if (S.cur && S.view === 'fill') renderTo($('#fill-canvas'), S.cur, rankedFill(S.cur, S.fill), {}); }, 80);
+const previewFill = throttle(() => (S.cur && S.view === 'fill') ? renderTo($('#fill-canvas'), S.cur, rankedFill(S.cur, S.fill), {}) : null, 50);
 function openFill(t){
   S.cur = t; S.fill = loadFill(t); S.batch = []; applyCalc(t, S.fill);
   showView('fill');
@@ -1951,7 +1959,10 @@ function styleCardHTML(t){
 }
 function renderStyleCards(){
   const t = S.cur; if (!t) return;
-  for (const id of ['#style-fill', '#style-ed']) { const el = $(id); if (el) el.innerHTML = styleCardHTML(t); }
+  // only one copy at a time: the one on the screen in use (duplicate controls made changes go to a hidden copy)
+  const live = S.view === 'fill' ? '#style-fill' : '#style-ed', idle = live === '#style-fill' ? '#style-ed' : '#style-fill';
+  const off = $(idle); if (off) off.innerHTML = '';
+  const el = $(live); if (el) el.innerHTML = styleCardHTML(t);
 }
 function onStyleInput(e){
   const id = e.target.id; if (!id || !id.startsWith('st-') || !S.cur) return;
@@ -1962,7 +1973,7 @@ function onStyleInput(e){
   let v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
   if (v === '' ) return;
   if (['weight', 'size', 'sw'].includes(k)) { v = Number(v); if (!isFinite(v) || (k === 'size' && v < 4)) return; }
-  if (k === 'color' || k === 'sc') { if (!/^#[0-9a-f]{6}$/i.test(v)) return; if (k === 'color') { $('#st-color').value = v; $('#st-colorhex').value = v; } }
+  if (k === 'color' || k === 'sc') { if (!/^#[0-9a-f]{6}$/i.test(v)) return; if (k === 'color') { const card = $(S.view === 'fill' ? '#style-fill' : '#style-ed'); if (card) { card.querySelector('#st-color').value = v; card.querySelector('#st-colorhex').value = v; } } }
   scopeZones(t, S.styleScope).forEach(z => { z[k] = v; });
   queueSave(t);
   if (S.view === 'fill') previewFill(); else previewEditor();
