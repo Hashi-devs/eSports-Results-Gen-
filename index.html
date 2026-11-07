@@ -2146,13 +2146,14 @@ function inkCrop(src, x, y, w, h, keep, outH){
   c.aspect = aspect; return c;
 }
 /* the yellow kill number in a box: each digit as its own blob, described by a small ink grid + its shape */
-function digitBlobs(src, x, y, w, h){
+function digitBlobs(src, x, y, w, h, loose){
   x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y)); w = Math.min(src.width - x, Math.round(w)); h = Math.min(src.height - y, Math.round(h));
   if (w < 3 || h < 3) return [];
   const d = src.getContext('2d', {willReadFrequently: true}).getImageData(x, y, w, h).data, N = w * h;
   const L = new Float32Array(N); for (let i = 0; i < N; i++) L[i] = .299 * d[i*4] + .587 * d[i*4+1] + .114 * d[i*4+2];
   const bg = [...L].sort((p, q) => p - q)[Math.floor(N * .45)];
-  const m = new Uint8Array(N); for (let i = 0; i < N; i++) if (isYellow(d[i*4], d[i*4+1], d[i*4+2], L[i], bg)) m[i] = 1;
+  const loosely = (r, g, b, l) => Math.min(r, g) > 105 && r - b > 40 && g - b > 35 && b < 140 && l > bg + 22; // tinted or faint yellow
+  const m = new Uint8Array(N); for (let i = 0; i < N; i++) if (loose ? loosely(d[i*4], d[i*4+1], d[i*4+2], L[i]) : isYellow(d[i*4], d[i*4+1], d[i*4+2], L[i], bg)) m[i] = 1;
   // connected blobs (8-neighbour)
   const seen = new Int32Array(N).fill(-1), blobs = [];
   for (let i = 0; i < N; i++) {
@@ -2163,7 +2164,7 @@ function digitBlobs(src, x, y, w, h){
     blobs.push({x0, x1, y0, y1, n, px});
   }
   const big = blobs.filter(b => b.y1 - b.y0 + 1 >= h * .28 && b.n >= 6);
-  if (!big.length) return [];
+  if (!big.length) return loose ? [] : digitBlobs(src, x, y, w, h, true); // a faint number on a bright patch: try once more, less strictly
   const H = Math.max(...big.map(b => b.y1 - b.y0 + 1));
   // merge pieces that overlap horizontally (a broken stroke), keep digit-sized blobs
   big.sort((a, b) => a.x0 - b.x0);
@@ -2174,7 +2175,7 @@ function digitBlobs(src, x, y, w, h){
     const inBlob = new Uint8Array(N); b.px.forEach(p => { inBlob[p] = 1; });
     for (let yy = b.y0; yy <= b.y1; yy++) for (let xx = b.x0; xx <= b.x1; xx++) { const gx = Math.min(GW - 1, Math.floor((xx - b.x0) * GW / bw)), gy = Math.min(GH - 1, Math.floor((yy - b.y0) * GH / bh)); cnt[gy * GW + gx]++; if (inBlob[yy * w + xx]) g[gy * GW + gx]++; }
     for (let k = 0; k < g.length; k++) g[k] = cnt[k] ? g[k] / cnt[k] : 0;
-    return {grid: Array.from(g, v => Math.round(v * 100) / 100), aspect: Math.round(bw / bh * 100) / 100, x: x + b.x0, h: bh};
+    return {grid: Array.from(g, v => Math.round(v * 100) / 100), aspect: Math.round(bw / bh * 100) / 100, x: x + b.x0, h: bh, cy: y + (b.y0 + b.y1) / 2};
   });
 }
 /* Free Fire kill-number samples (0–9), cut from real result screens: digit, width/height, 8×12 ink grid */
@@ -2250,7 +2251,13 @@ async function ffReadScreen(img, ocr){
   if (cl.length >= 3) { let gi = 0, gb = -1; for (let i = 1; i < cl.length; i++) if (cl[i] - cl[i-1] > gb) { gb = cl[i] - cl[i-1]; gi = i; } split = (cl[gi - 1] + cl[gi]) / 2; }
   const halves = [cl.filter(x => x < split).slice(-2), cl.filter(x => x >= split).slice(0, 2)];
   // the right column's second "Eliminations" is often cut off at the screen edge: place it from the usual spacing
-  if (halves[1].length === 1 && halves[0].length === 2) { const g = (halves[0][1] - halves[0][0]) * .735; if (halves[1][0] + g < W - eh * 1.5) halves[1].push(halves[1][0] + g); }
+  if (halves[1].length === 1 && halves[0].length === 2) { const g = (halves[0][1] - halves[0][0]) * .735; if (halves[1][0] + g < W - eh * 1.5) { halves[1].push(halves[1][0] + g); halves[1].guessed = true; } }
+  // a guessed column is lined up on its actual yellow numbers: each number ends just before "Eliminations"
+  if (halves[1].guessed) {
+    const est = halves[1][1], rights = [];
+    el.filter(w => w.ex >= split).forEach(w => { const bl = digitBlobs(cv, est - eh * 3, w.cy - eh * 1.15, eh * 4.2, eh * 2.3).filter(b => b.x + b.aspect * b.h > est - eh * 2.2); if (bl.length) { const b = bl[bl.length - 1]; rights.push(b.x + b.aspect * b.h); } });
+    if (rights.length >= 2) { const r = rights.sort((a, b) => a - b)[rights.length >> 1]; halves[1][1] = r + eh * .3; }
+  }
   const teams = []; let place = 0;
   const slots = [];
   // the widest name cell (the left half is roomier) so names in the narrower right half are not cut
@@ -2274,7 +2281,8 @@ async function ffReadScreen(img, ocr){
       for (const dir of [1, -1]) {
         const y = b.lines[0].cy + dir * small, nb = blocks[bi + dir];
         if (nb && Math.abs(nb.lines[dir > 0 ? 0 : nb.lines.length - 1].cy - y) < small * .6) continue;
-        if (hc.some(cx => digitBlobs(cv, cx - eh * 2.4, y - eh * 1.15, eh * 2.75, eh * 2.3).filter(bl => bl.x < cx - eh * .2).length)) { if (dir > 0) b.lines.push({cy: y, ws: []}); else b.lines.unshift({cy: y, ws: []}); break; }
+        // only if the numbers found really sit at that height (not the edge of a neighbouring team's line)
+        if (hc.some(cx => digitBlobs(cv, cx - eh * 2.4, y - eh * 1.15, eh * 2.75, eh * 2.3).filter(bl => bl.x < cx - eh * .2 && Math.abs(bl.cy - y) < small * .25).length)) { if (dir > 0) b.lines.push({cy: y, ws: []}); else b.lines.unshift({cy: y, ws: []}); break; }
       }
     });
     for (const b of blocks) {
