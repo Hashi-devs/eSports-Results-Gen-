@@ -582,7 +582,7 @@ function drawText(ctx, z, text, sizeIn){
   setTextFont(ctx, z, size);
   const m = ctx.measureText(t), cap = ctx.measureText('H').actualBoundingBoxAscent || size * .7;
   const k = z.fit !== false && m.width > z.w ? Math.max(.5, z.w / m.width) : 1; // squeeze only what is needed
-  const al = (z.type === 'teamName' || z.type === 'teamTag') ? 'left' : (z.align || 'center');
+  const al = z.align || ((z.type === 'teamName' || z.type === 'teamTag') ? 'left' : 'center');
   ctx.textAlign = al; ctx.textBaseline = 'alphabetic';
   const x = al === 'left' ? z.x : al === 'right' ? z.x + z.w : z.x + z.w / 2;
   const va = z.valign || 'middle';
@@ -812,7 +812,7 @@ function renderPanel(){
       <div class="field"><label for="z-size">Size (px)</label><input id="z-size" type="number" min="4" data-k="size" value="${z.size}"></div>
       <div class="field"><label for="z-color">Colour</label><div class="row" style="flex-wrap:nowrap"><input type="color" id="z-color" data-k="color" value="${esc(z.color)}" aria-label="Colour picker"><input id="z-colorhex" data-k="color" value="${esc(z.color)}" aria-label="Colour code"></div></div>
     </div>
-    ${isTeamType(z.type) ? '<p class="help">Team names are always left aligned.</p>' : `<div class="field"><span class="lab">Align</span><div class="seg">${['left','center','right'].map(a => `<button data-set="align:${a}" class="${z.align === a ? 'on' : ''}">${a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</div></div>`}
+    <div class="field"><span class="lab">Align</span><div class="seg">${['left','center','right'].map(a => `<button data-set="align:${a}" class="${z.align === a ? 'on' : ''}">${a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</div></div>
     <div class="field"><span class="lab">Vertical</span><div class="seg">${['top','middle','bottom'].map(a => `<button data-set="valign:${a}" class="${z.valign === a ? 'on' : ''}">${a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</div></div>
     <div class="row"><label class="check"><input type="checkbox" data-k="fit" ${z.fit !== false ? 'checked' : ''}> Shrink long text to fit</label><label class="check"><input type="checkbox" data-k="upper" ${z.upper ? 'checked' : ''}> CAPITALS</label></div>
     <div class="grid2">
@@ -840,6 +840,7 @@ function onPanelInput(e){
   if (k === 'h' && z.type !== 'teamLogo' && z.type !== 'image' && z.size > v) { /* keep size, fit handles it */ }
   z[k] = v;
   spreadToColumn(z, [k]);
+  if (k === 'type' && (v === 'teamName' || v === 'teamTag')) { z.align = 'left'; spreadToColumn(z, ['align']); }
   if (k === 'type') { if (isTeamType(v) && !isTeamType(z.prevType || 'text') && /^Text \d+$/.test(z.field)) z.field = nextField(v); z.prevType = v; renderPanel(); }
   if (k === 'type' || k === 'field' || k === 'row') { renderChips(); }
   renderBoxes(); previewEditor(); queueSave(S.cur);
