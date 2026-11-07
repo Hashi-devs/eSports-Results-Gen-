@@ -1245,6 +1245,7 @@ function wireFill(){
     const tk = e.target.dataset.team, ik = e.target.dataset.img;
     if (tk != null) { const v = e.target.value; if (!v) delete S.fill.teams[tk]; else if (v !== '__custom') { const t = teamById(v); S.fill.teams[tk] = {id: v, name: t ? t.name : ''}; } onFillChange(); }
     if (e.target.id === 'imp-file') { importFiles(e.target.files); e.target.value = ''; return; }
+    if (e.target.id === 'stack-toggle') { S.cur.stack = e.target.checked; queueSave(S.cur); toast(e.target.checked ? 'Stack points is on: new results add to the table.' : 'Stack points is off: new results replace the table.'); renderFillForm(); return; }
     if (e.target.id === 'ff-toggle') { const t = S.cur; const old = (t.scoring && t.scoring.ff === false) ? t.scoring : {}; t.scoring = {...old, ff: e.target.checked}; if (!e.target.checked && !old.pts) { t.scoring.pts = FF_OFFICIAL.pts.slice(); t.scoring.perKill = 1; } queueSave(t); renderFillForm(); toast(e.target.checked ? 'FF official scoring is on.' : 'FF official scoring is off. Set your own points below.'); return; }
     if (e.target.id === 'ff-pts' || e.target.id === 'ff-kill') { const t = S.cur; const pts = $('#ff-pts').value.split(/[,\s;]+/).map(num).filter(v => v != null); t.scoring = {ff: false, preset: 'custom', pts: pts.length ? pts : FF_OFFICIAL.pts.slice(), perKill: num($('#ff-kill').value) ?? 1}; queueSave(t); toast('Your points are saved for this template.'); return; }
     if (e.target.id === 'sc-preset') { const p = PLACEMENT_PRESETS.find(x => x.id === e.target.value); if (p) $('#sc-pts').value = p.pts.join(', '); return; }
@@ -2094,21 +2095,192 @@ async function prepForOcr(file){
     cx.putImageData(id, 0, 0); return cv;
   } finally { URL.revokeObjectURL(url); }
 }
+/* ---------- Free Fire match result screens (read on this device) ----------
+   Each screenshot is one match. Teams are listed by placement (1–5 on the left, 6+ on the right),
+   each with up to four players: a name and a yellow "N Eliminations" count. There is no team name,
+   so the team is the tag most of its players share (FEN in FEN.TOCHEX, FEN.JERRY…). */
+function parseTsv(tsv){
+  const out = [];
+  String(tsv || '').split('\n').forEach((ln, i) => { if (!i) return; const c = ln.split('\t'); if (c.length < 12) return; const txt = c.slice(11).join('\t').trim(); if (!txt || +c[10] < 0) return; out.push({x: +c[6], y: +c[7], w: +c[8], h: +c[9], conf: +c[10], text: txt, line: c[2] + '.' + c[3] + '.' + c[4]}); });
+  return out;
+}
+const isElim = s => /[l1I|][il1|!]m[il1|!]n|Elim|Eli[mn]|[il1]minat/i.test(s);
+function ffScale(img){
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height, k = Math.min(3, Math.max(1, 1080 / H));
+  const cv = document.createElement('canvas'); cv.width = Math.round(W * k); cv.height = Math.round(H * k);
+  cv.getContext('2d', {willReadFrequently: true}).drawImage(img, 0, 0, cv.width, cv.height); return cv;
+}
+function grayCopy(cv){
+  const g = document.createElement('canvas'); g.width = cv.width; g.height = cv.height; const gx = g.getContext('2d', {willReadFrequently: true}); gx.drawImage(cv, 0, 0);
+  const id = gx.getImageData(0, 0, g.width, g.height), d = id.data;
+  for (let i = 0; i < d.length; i += 4) { const l = 255 - (.299 * d[i] + .587 * d[i+1] + .114 * d[i+2]); d[i] = d[i+1] = d[i+2] = l; }
+  gx.putImageData(id, 0, 0); return g;
+}
+/* stacks small crops one per line on white, so a single OCR pass reads them all */
+function stackCrops(crops, lineH){
+  const gap = Math.round(lineH * .7), W = Math.max(60, ...crops.map(c => c ? c.width : 0)) + 40;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = crops.length * (lineH + gap) + gap;
+  const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+  crops.forEach((c, i) => { if (c) cx.drawImage(c, 20, gap + i * (lineH + gap) + Math.round((lineH - c.height) / 2)); });
+  return {cv, rowOf: y => Math.floor((y - gap / 2) / (lineH + gap))};
+}
+/* crop → black ink on white, scaled to a fixed text height. keep(r,g,b,lum,bg) says which pixels are ink;
+   bg is the crop's typical brightness, so text is judged against its own row (black or gold) */
+function inkCrop(src, x, y, w, h, keep, outH){
+  x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y)); w = Math.min(src.width - x, Math.round(w)); h = Math.min(src.height - y, Math.round(h));
+  if (w < 3 || h < 3) return null;
+  const d = src.getContext('2d', {willReadFrequently: true}).getImageData(x, y, w, h).data;
+  const L = new Float32Array(w * h); for (let i = 0; i < w * h; i++) L[i] = .299 * d[i*4] + .587 * d[i*4+1] + .114 * d[i*4+2];
+  const bg = [...L].sort((p, q) => p - q)[Math.floor(w * h * .45)];
+  let x0 = w, x1 = -1, y0 = h, y1 = -1, n = 0; const m = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const k = j * w + i; if (keep(d[k*4], d[k*4+1], d[k*4+2], L[k], bg)) { m[k] = 1; n++; if (i < x0) x0 = i; if (i > x1) x1 = i; if (j < y0) y0 = j; if (j > y1) y1 = j; } }
+  if (x1 < 0 || n < 6) return null;
+  const aspect = (x1 - x0 + 1) / (y1 - y0 + 1);
+  const mc = document.createElement('canvas'); mc.width = w; mc.height = h; const mx = mc.getContext('2d'); const md = mx.createImageData(w, h);
+  for (let k = 0; k < w * h; k++) { const v = m[k] ? 0 : 255; md.data[k*4] = md.data[k*4+1] = md.data[k*4+2] = v; md.data[k*4+3] = 255; }
+  mx.putImageData(md, 0, 0);
+  const cw = x1 - x0 + 1, ch = y1 - y0 + 1, k = outH / Math.max(ch, h * .5);
+  const c = document.createElement('canvas'); c.width = Math.max(8, Math.round(cw * k) + 16); c.height = outH + 16;
+  const cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+  cx.drawImage(mc, x0, y0, cw, ch, 8, Math.round((outH + 16 - ch * k) / 2), cw * k, ch * k);
+  c.aspect = aspect; return c;
+}
+const isYellow = (r, g, b, l, bg) => r > 130 && g > 95 && b < g * .55 && r - b > 80 && l > bg + 40;
+const isLightText = (r, g, b, l, bg) => l > bg + 55 && l > 120 && !(b < g * .5 && r - b > 90);
+/* the clan tag most of a team's players share; conf = how many players carry it */
+function teamTag(names){
+  const clean = names.map(n => String(n || '').replace(/\s+/g, ' ').trim()).filter(n => n.length >= 2);
+  if (!clean.length) return {tag: '', conf: 0};
+  const cands = new Map();
+  const add = c => { c = c.replace(/[\s.·:_\-|]+$/, ''); if (c.length >= 2 || /[^\x00-\x7f]/.test(c)) cands.set(c.toLowerCase(), cands.get(c.toLowerCase()) || c); };
+  clean.forEach(n => { const dot = n.indexOf('.'); if (dot > 0 && dot <= 7) add(n.slice(0, dot)); const sp = n.indexOf(' '); if (sp > 0 && sp <= 7) add(n.slice(0, sp)); });
+  for (let i = 0; i < clean.length; i++) for (let j = i + 1; j < clean.length; j++) {
+    const a = clean[i], b = clean[j]; let k = 0; while (k < a.length && k < b.length && a[k].toLowerCase() === b[k].toLowerCase()) k++;
+    if (k >= 2) { let c = a.slice(0, k); const cut = c.search(/[.\s][^.\s]*$/); if (cut >= 2) c = c.slice(0, cut); add(c); }
+  }
+  const starts = (n, c) => { const a = n.toLowerCase(), b = c.toLowerCase(); if (a.startsWith(b)) return true; return b.length >= 3 && lev(a.slice(0, b.length), b) <= 1; };
+  let best = null;
+  for (const [, c] of cands) { const n = clean.filter(x => starts(x, c)).length; if (!best || n > best.n || (n === best.n && c.length > best.c.length)) best = {c, n}; }
+  if (best && best.n >= 2) return {tag: best.c, conf: best.n};
+  const f = clean[0]; const cut = f.search(/[.\s]/); return {tag: cut > 0 ? f.slice(0, cut) : f.slice(0, 12), conf: 1};
+}
+function ffMergeTags(rows){
+  const key = (name, tag) => { let n = String(name || ''); if (tag && n.toLowerCase().startsWith(tag.toLowerCase())) n = n.slice(tag.length); return norm(n); };
+  // players seen in a team with a clear tag identify that team in other screenshots
+  const known = [];
+  rows.filter(r => r.conf >= 2).forEach(r => r.players.forEach(p => { const k = key(p.name, r.team), f = norm(p.name); if (k.length >= 3) known.push({k, tag: r.team}); if (f.length >= 4 && f !== k) known.push({k: f, tag: r.team}); }));
+  const strong = new Set(rows.filter(r => r.conf >= 2).map(r => norm(r.team)));
+  rows.forEach(r => {
+    if (r.conf >= 2 && strong.has(norm(r.team))) return;
+    const votes = new Map();
+    r.players.forEach(p => { const k = norm(p.name); if (k.length < 3) return; let hit = null, bd = 1e9;
+      for (const kn of known) { const d = Math.min(lev(k, kn.k), k.endsWith(kn.k) || kn.k.endsWith(k) ? 0 : 99); if (d < bd) { bd = d; hit = kn; } }
+      if (hit && bd <= Math.max(1, Math.floor(hit.k.length * .25))) votes.set(hit.tag, (votes.get(hit.tag) || 0) + 1); });
+    const top = [...votes.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (top && (top[1] >= 2 || r.conf < 2)) { r.team = top[0]; r.conf = Math.max(r.conf, top[1]); }
+  });
+  // the same team read slightly differently in different screenshots ("KZN" / "KZM") becomes one name
+  const counts = new Map(); rows.forEach(r => { if (r.team) counts.set(r.team, (counts.get(r.team) || 0) + (r.conf || 1)); });
+  const names = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a)), canon = new Map();
+  for (const n of names) { const a = norm(n); const hit = [...new Set(canon.values())].find(c => { const b = norm(c); return b === a || (a.length >= 3 && lev(b, a) <= 1) || (a.length >= 2 && b.length === a.length + 1 && b.startsWith(a)); }); canon.set(n, hit || n); }
+  rows.forEach(r => { if (r.team) r.team = canon.get(r.team); });
+  return rows;
+}
+async function ffReadScreen(img, ocr){
+  const cv = ffScale(img), W = cv.width, H = cv.height;
+  const words = parseTsv(await ocr(grayCopy(cv), {psm: '11'}));
+  const el = words.filter(w => isElim(w.text) && w.h > H * .008 && w.h < H * .05);
+  if (el.length < 6) return null; // not a Free Fire result screen
+  const med = a => { const v = [...a].sort((p, q) => p - q); return v[v.length >> 1]; };
+  const eh = med(el.map(w => w.h));
+  el.forEach(w => { const i = w.text.search(/[EF][l1I|]|[l1I|][il1|!]m/); const cw = w.w / Math.max(1, w.text.length); w.ex = w.x + (i > 0 ? i * cw : 0); w.pre = i > 0 ? w.text.slice(0, i) : ''; w.cy = w.y + w.h / 2; });
+  const ew = med(el.filter(w => /nations?$/i.test(w.text)).map(w => w.w * 12 / Math.max(12, w.text.length - w.pre.length))) || eh * 6.5;
+  // columns of "Eliminations": two per half
+  const xs = el.map(w => w.ex).sort((a, b) => a - b), cols = [];
+  for (const x of xs) { const c = cols[cols.length - 1]; if (c && x - c.max < W * .05) { c.xs.push(x); c.max = x; } else cols.push({xs: [x], max: x}); }
+  let cl = cols.filter(c => c.xs.length >= 2).map(c => med(c.xs));
+  if (cl.length < 2) return null;
+  let split = W * .545;
+  if (cl.length >= 3) { let gi = 0, gb = -1; for (let i = 1; i < cl.length; i++) if (cl[i] - cl[i-1] > gb) { gb = cl[i] - cl[i-1]; gi = i; } split = (cl[gi - 1] + cl[gi]) / 2; }
+  const halves = [cl.filter(x => x < split).slice(-2), cl.filter(x => x >= split).slice(0, 2)];
+  const teams = []; let place = 0;
+  const slots = [];
+  // the widest name cell (the left half is roomier) so names in the narrower right half are not cut
+  const cellOf = hc => (hc.length > 1 ? hc[1] - hc[0] : ew * 2.2) - ew * .98 - eh * 2.2;
+  const cellMax = Math.max(...halves.filter(h => h.length).map(cellOf));
+  for (let hi = 0; hi < 2; hi++) {
+    const hc = halves[hi]; if (!hc.length) continue;
+    const D = hc.length > 1 ? hc[1] - hc[0] : ew * 2.2;
+    const hw = el.filter(w => hi ? w.ex >= split : w.ex < split).sort((a, b) => a.cy - b.cy);
+    const lines = [];
+    for (const w of hw) { const l = lines[lines.length - 1]; if (l && Math.abs(w.cy - l.cy) < eh * .7) { l.ws.push(w); l.cy = (l.cy * (l.ws.length - 1) + w.cy) / l.ws.length; } else lines.push({cy: w.cy, ws: [w]}); }
+    const blocks = [];
+    // lines of one team sit closer together than the gap between teams
+    const gaps = lines.slice(1).map((l, i) => l.cy - lines[i].cy).sort((p, q) => p - q);
+    const small = gaps.length ? gaps.slice(0, Math.max(1, Math.ceil(gaps.length / 2)))[Math.floor(Math.max(1, Math.ceil(gaps.length / 2)) / 2)] : H;
+    const thr = Math.min(H * .07, small * 1.2);
+    for (const l of lines) { const b = blocks[blocks.length - 1]; if (b && l.cy - b.lines[b.lines.length - 1].cy < thr) b.lines.push(l); else blocks.push({lines: [l]}); }
+    for (const b of blocks) {
+      place++; const tm = {place, players: []}; teams.push(tm);
+      for (const l of b.lines) hc.forEach((cx, ci) => {
+        const w = l.ws.find(w => Math.abs(w.ex - cx) < W * .04);
+        const dx0 = cx - eh * 2.6, dy0 = l.cy - eh * .9;
+        const dig = inkCrop(cv, dx0, dy0, eh * 2.5, eh * 1.8, isYellow, 40);
+        if (!w && !dig) return; // no player here
+        // names sit in the space between the previous "Eliminations" and this player's number
+        const nameR = cx - eh * 2.3, nameL = ci === 0 ? nameR - cellMax + eh * .45 : Math.min(nameR - eh * 3, hc[0] + ew * 1.01);
+        const name = inkCrop(cv, nameL, l.cy - eh * .9, nameR - nameL, eh * 1.8, isLightText, 40);
+        const slot = {tm, w, dig, name}; slots.push(slot); tm.players.push(slot);
+      });
+    }
+  }
+  if (!teams.length) return null;
+  // read every kill number in one pass, then every name in one pass
+  const ds = stackCrops(slots.map(s => s.dig), 48);
+  const dw = parseTsv(await ocr(ds.cv, {psm: '6', whitelist: '0123456789'}));
+  const digitAt = i => dw.filter(w => ds.rowOf(w.y + w.h / 2) === i).map(w => w.text).join('').replace(/\D/g, '');
+  const ns = stackCrops(slots.map(s => s.name), 48);
+  const nw = parseTsv(await ocr(ns.cv, {psm: '6'}));
+  slots.forEach((s, i) => {
+    let dtxt = digitAt(i);
+    if (dtxt.length > 2) dtxt = dtxt.slice(0, 2);
+    if (dtxt === '' && s.dig && s.dig.aspect < .5) dtxt = '1'; // a lone thin stroke is a 1
+    const pre = s.w ? s.w.pre.replace(/[QOo]/g, '0').replace(/[lI|!]/g, '1').replace(/\D/g, '') : '';
+    s.kills = dtxt !== '' ? +dtxt : pre !== '' ? +pre : (s.dig ? null : 0);
+    if (s.kills != null && s.kills > 40) s.kills = pre !== '' ? +pre : null;
+    s.player = nw.filter(w => ns.rowOf(w.y + w.h / 2) === i).sort((a, b) => a.x - b.x).map(w => w.text).join(' ').trim()
+      .replace(/^(?:[^\p{L}\p{N}]+|[\p{L}\p{N}]\s|[a-z]{1,3}\s?(?=[A-Z]{2,}[.\s]))+/u, '').trim(); // stray marks at the crop edge
+  });
+  return teams.map(t => ({place: t.place, ...(o => ({team: o.tag, conf: o.conf}))(teamTag(t.players.map(p => p.player))), kills: t.players.reduce((n, p) => n + (p.kills || 0), 0), unread: t.players.some(p => p.kills == null), players: t.players.map(p => ({name: p.player, kills: p.kills}))}));
+}
 async function ocrImages(files){
   if (!window.Tesseract) { setImportMsg('Getting the screenshot reader ready (first time only)…'); await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'); }
   let idx = 0;
   const worker = await Tesseract.createWorker('eng', 1, {logger: m => { if (m.status === 'recognizing text') setImportMsg(`Reading screenshot ${idx + 1} of ${files.length}… ${Math.round(m.progress * 100)}%`); }});
   try {
-    await worker.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'});
-    let all = [];
+    const ocr = async (canvas, o) => { await worker.setParameters({tessedit_pageseg_mode: o.psm || '6', preserve_interword_spaces: '1', tessedit_char_whitelist: o.whitelist || ''}); const {data} = await worker.recognize(canvas, {}, {tsv: true, text: true}); return data.tsv || ''; };
+    let all = [], ff = [];
     for (; idx < files.length; idx++) {
+      const url = URL.createObjectURL(files[idx]); let im = null;
+      try { im = new Image(); im.src = url; await im.decode(); } catch (e) { im = null; }
+      const fr = im ? await ffReadScreen(im, ocr).catch(() => null) : null;
+      URL.revokeObjectURL(url);
+      if (fr && fr.length) { fr.forEach(r => ff.push({...r, match: idx + 1})); continue; }
+      await worker.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1', tessedit_char_whitelist: ''});
       const cv = await prepForOcr(files[idx]);
       const {data} = await worker.recognize(cv);
       const g = ocrToGrid(data.text || '');
       if (g.length > 1) all = all.length ? all.concat(g.slice(1)) : g;
     }
-    if (!all.length) throw new Error('no results table could be read from the screenshot. Try a sharper, uncropped screenshot.');
-    return [{name: 'screenshot', grid: all, ocr: true}];
+    const out = [];
+    if (ff.length) {
+      ffMergeTags(ff);
+      const unread = ff.filter(r => r.unread).length;
+      out.push({name: 'Free Fire screens', grid: [['Team', 'Match', 'Placement', 'Kills'], ...ff.map(r => [r.team || 'Team ' + r.place, String(r.match), String(r.place), String(r.kills)])], ocr: true, ff: {matches: new Set(ff.map(r => r.match)).size, unread}});
+    }
+    if (all.length) out.push({name: 'screenshot', grid: all, ocr: true});
+    if (!out.length) throw new Error('no results table could be read from the screenshot. Try a sharper, uncropped screenshot.');
+    return out;
   } finally { try { await worker.terminate(); } catch (e) {} }
 }
 
@@ -2198,10 +2370,12 @@ function showImport(st, grids){
     return srcs.some(s2 => s2[0] === g) ? g : (r && st.teams.some(x => x[r]) ? r : '');
   };
   const previewCols = st.mode === 'matches' ? [['Wins', x => x.wins], ['Kills', x => x._hasKills ? x.kills : '–'], ['KP', x => x.kp], ['PP', x => x.pp], ['Total', x => x.total]] : heads.map(h => [h, x => x.extra[norm(h)] ?? '']);
-  box.innerHTML = `<p class="help"><b>${st.teams.length} teams</b> read${st.mode === 'matches' ? ` from <b>${st.nMatches || 'several'} match${st.nMatches === 1 ? '' : 'es'}</b>, added up with your scoring rules` : ''}, sorted by Total. ${ocr ? '<b>Read from a screenshot: check the names and numbers below.</b> You can correct anything in the table afterwards.' : ''} ${st.notes.join(' ')}</p>
+  const ffg = grids.find(g => g.ff);
+  const ffNote = ffg ? `<p class="help">Read <b>${ffg.ff.matches} Free Fire match screen${ffg.ff.matches === 1 ? '' : 's'}</b>. Each team is named by the tag its players share, and its placement and kills are scored with ${scoringOf(t).ff ? 'FF official scoring' : 'your points'}.${ffg.ff.unread ? ` <b>In ${ffg.ff.unread} team result${ffg.ff.unread === 1 ? '' : 's'} a player's kill number could not be read</b> and was counted as 0, so check the kills.` : ''}</p>` : '';
+  box.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center;margin-top:10px"><span class="lab">Results read</span><button class="btn sm ghost" data-act="imp-cancel">✕ Don't use these</button></div>${ffNote}${t.stack ? '<p class="help"><b>Stack points is on:</b> these are added to the standings already in the table.</p>' : ''}<p class="help"><b>${st.teams.length} teams</b> read${st.mode === 'matches' ? ` from <b>${st.nMatches || 'several'} match${st.nMatches === 1 ? '' : 'es'}</b>, added up with your scoring rules` : ''}, sorted by Total. ${ocr ? '<b>Read from a screenshot: check the names and numbers below.</b> You can correct anything in the table afterwards.' : ''} ${st.notes.join(' ')}</p>
     <div class="tablewrap"><table><thead><tr><th>#</th><th>Team</th>${previewCols.map(([h]) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${st.teams.slice(0, 24).map(x => `<tr><td class="n">${x.rank}</td><td>${esc(x.team)}${(() => { const m = matchTeam(x.team); return m && m.id ? (norm(m.name) !== norm(x.team) ? ` <span class="chip lime">→ ${esc(m.name)}</span>` : '') : ' <span class="chip">no logo</span>'; })()}</td>${previewCols.map(([, f]) => `<td>${esc(f(x))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
     ${cols.length ? `<div class="form" style="gap:8px"><span class="lab">Which result goes in each column of your template</span>${cols.map((c, i) => { const g = guess(c, i); return `<div class="row" style="flex-wrap:nowrap"><span style="min-width:90px;font-weight:700">${esc(c.field)}</span><select id="imp-map-${i}" data-field="${esc(c.field)}" aria-label="Source for ${esc(c.field)}">${srcs.map(([v, l]) => `<option value="${esc(v)}" ${v === g ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`; }).join('')}</div>` : ''}
-    <div class="row"><button class="btn primary" data-act="imp-apply">Put these on the graphic</button><span class="muted small">${st.teams.length > tm.base ? `This design has ${tm.base} rows. You'll choose how to fit ${st.teams.length} teams next.` : ''}</span></div>`;
+    <div class="row"><button class="btn primary" data-act="imp-apply">Put these on the graphic</button><button class="btn ghost" data-act="imp-cancel">Cancel</button><span class="muted small">${st.teams.length > tm.base ? `This design has ${tm.base} rows. You'll choose how to fit ${st.teams.length} teams next.` : ''}</span></div>`;
 }
 function applyImport(decided){
   const t0 = S.cur, st0 = IM && IM.st; if (!st0) return;
@@ -2215,8 +2389,32 @@ function applyImport(decided){
   let calcNote = '';
   if (t.calc && map[t.calc.target] && (st.hasTotal || String(map[t.calc.target]).startsWith('x:'))) { t.calc = null; calcNote = ' Auto total was turned off because the totals came from your results.'; }
   const teamCol = tm.cols.find(c => c.kind === 'team');
+  S.undo = {id: t.id, values: JSON.parse(JSON.stringify(S.fill.values)), teams: JSON.parse(JSON.stringify(S.fill.teams)), calc: t.calc ? {...t.calc} : null};
+  let rowsIn = st.teams;
+  if (t.stack && teamCol) {
+    // continuous games: add the new results onto the standings already in the table, then re-rank
+    const n = v => { const x = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, '')); return isFinite(x) ? x : null; };
+    const valOf = (x, c) => { const src = map[c.field]; if (!src) return undefined; return src.startsWith('x:') ? x.extra[src.slice(2)] : x[src]; };
+    const recs = [];
+    tm.rows.forEach(r => { const tmv = S.fill.teams[teamCol.field + '|' + r]; if (!tmv || !tmv.name) return; const vals = {}; tm.cols.forEach(c => { if (c.kind === 'text') vals[c.field] = S.fill.values[c.field + '|' + r]; }); recs.push({team: tmv, vals}); });
+    for (const x of st.teams) {
+      const m = matchTeam(x.team), key = norm(m.name);
+      let rec = recs.find(e => (m.id && e.team.id === m.id) || norm(e.team.name) === key);
+      if (!rec) { rec = {team: m, vals: {}}; recs.push(rec); }
+      tm.cols.forEach(c => { if (c.kind !== 'text' || roleOf(c.field) === 'rank') return; const v = valOf(x, c); if (v == null || v === '') return; const a = n(rec.vals[c.field]), b = n(v); rec.vals[c.field] = (a != null && b != null) ? String(Math.round((a + b) * 100) / 100) : String(v); });
+    }
+    const tf = totalField(t), wf = (tm.cols.find(c => roleOf(c.field) === 'wins') || {}).field, kf = (tm.cols.find(c => ['kp', 'kills'].includes(roleOf(c.field))) || {}).field;
+    const k = (r, f) => f ? (n(r.vals[f]) ?? -Infinity) : 0;
+    recs.sort((a, b) => k(b, tf) - k(a, tf) || k(b, wf) - k(a, wf) || k(b, kf) - k(a, kf));
+    tm.rows.forEach((r, i) => { const e = recs[i]; tm.cols.forEach(c => { const key = c.field + '|' + r; if (!tm.has.has(key)) return;
+      if (c.kind === 'team') { if (e) S.fill.teams[key] = e.team; else delete S.fill.teams[key]; return; }
+      if (c.kind !== 'text') return; const v = e && e.vals[c.field]; if (v == null || v === '') delete S.fill.values[key]; else S.fill.values[key] = v; }); });
+    saveFill(); queueSave(t); renderFillForm(); onFillChange();
+    toast(`Stacked ${st.teams.length} teams onto the table: ${recs.length} teams now, re-ranked by ${tf || 'total'}.${recs.length > tm.rows.length ? ` Top ${tm.rows.length} shown.` : ''}${calcNote}`);
+    return;
+  }
   tm.rows.forEach((r, i) => {
-    const x = st.teams[i];
+    const x = rowsIn[i];
     tm.cols.forEach(c => {
       const k = c.field + '|' + r; if (!tm.has.has(k)) return;
       if (c.kind === 'team') { if (x) S.fill.teams[k] = matchTeam(x.team); else delete S.fill.teams[k]; return; }
@@ -2296,7 +2494,19 @@ function importCard(t){
     <div class="field"><label for="imp-text">Or type the results</label>
       <textarea id="imp-text" rows="6" placeholder="${esc(tableModel(t).cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}&#10;One team per line, for example:&#10;Lagos Lions, 2, 48, 41"></textarea></div>
     <div class="row"><button class="btn primary sm" data-act="imp-text">Fill the table</button><span class="muted small">Commas between columns. Rows copied from a spreadsheet work too${S.sample ? ', and so does messy text like a WhatsApp message' : ''}.</span></div>
+    <div class="ffrow"><div class="ff-lab">Stack points</div>
+      <button type="button" class="qbtn" data-act="stack-help" aria-label="How stacking points works">?</button>
+      <label class="switch" title="Stack points"><input type="checkbox" id="stack-toggle" ${t.stack ? 'checked' : ''} aria-label="Stack points"><span></span></label></div>
+    ${S.undo && S.undo.id === t.id ? '<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="imp-undo">Undo last import</button></div>' : ''}
     <div id="imp-result"></div></div></details>`;
+}
+function stackHelp(){
+  $('#modal-title').textContent = 'Stack points';
+  $('#modal-help').textContent = 'For continuous games: leagues, several days or rounds.';
+  $('#modal-body').innerHTML = `<p class="help" style="margin-top:8px">When it is on, new results are <b>added to the standings already in the table</b> instead of replacing them. Each team's Booyahs, kills and points build up, and the table re-ranks on the new totals, so teams move up and down as the games go on.</p>
+    <p class="lab" style="margin-top:10px">How to use it</p><p class="help">1. Fill the table with the standings so far, or start empty.<br>2. Turn on Stack points.<br>3. Import only the newest matches. They are scored with your scoring (FF official by default) and added on.</p>
+    <p class="lab" style="margin-top:10px">Made a mistake?</p><p class="help">Tap Undo last import to go back one step. Clear entries starts a fresh table.</p>`;
+  $('#modal').classList.remove('hidden');
 }
 
 /* ---------- text style for many spots at once ---------- */
@@ -2481,6 +2691,9 @@ async function act(a, el){
     case 'restore-original': restoreOriginal(); break;
     case 'imp-text': importText(); break;
     case 'imp-apply': applyImport(); break;
+    case 'imp-cancel': IM = null; $('#imp-result').innerHTML = ''; setImportMsg(''); toast('Those results were not used.'); break;
+    case 'stack-help': stackHelp(); break;
+    case 'imp-undo': if (S.undo && S.cur && S.undo.id === S.cur.id) { S.fill.values = S.undo.values; S.fill.teams = S.undo.teams; if (S.undo.calc !== undefined) S.cur.calc = S.undo.calc; S.undo = null; saveFill(); queueSave(S.cur); renderFillForm(); onFillChange(); toast('Last import undone.'); } break;
     case 'sc-save': saveScoring(); break;
     case 'detect-cancel': $('#detect-modal').classList.add('hidden'); DT = null; toast('Tap Draw spot to mark the spots yourself.'); break;
     case 'calc-toggle': { const t = S.cur; if (!t) break; const tg = $('#calc-target').value, from = $$('#calc-from input:checked').map(i => i.value).filter(f => f !== tg); t.calc = (el.dataset.on === '1' && from.length) ? {target: tg, from} : null; if (el.dataset.on === '1' && !from.length) { toast('Tick at least one column to add up.', true); break; } queueSave(t); applyCalc(t, S.fill); renderFillForm(); onFillChange(); toast(t.calc ? `${tg} now adds up ${from.join(' + ')} automatically.` : 'Auto total turned off.'); break; }
