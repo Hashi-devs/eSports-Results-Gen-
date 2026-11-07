@@ -117,6 +117,16 @@ input[type=file]{font-size:.85rem;max-width:100%}
 .ntopt .num{font-family:var(--display);font-size:1.4rem;min-width:56px;color:var(--accent)}
 .ntopt b{display:block;font-family:var(--label)}
 .ntopt small{display:block;color:var(--muted);font-size:.8rem;margin-top:3px;line-height:1.4}
+.xcheck{margin:10px 0;padding:10px 12px;border:1px solid #c9a227;background:rgba(201,162,39,.08)}
+.xhead{font-family:var(--label);font-size:.9rem;color:#f2cf5b;margin:0 0 4px}
+.xitem{display:flex;flex-direction:column;gap:6px;padding:8px 0;border-top:1px solid var(--line)}
+.xitem img{max-width:100%;height:auto;border:1px solid var(--line-2);image-rendering:auto}
+.xitem.ok{opacity:.55}
+.xline{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.85rem}
+.xline small{color:var(--muted)}
+.xfix{display:flex;align-items:center;gap:6px;font-family:var(--label);font-size:.8rem}
+.xfix input{width:64px}
+.xmark{display:block;font-size:.7rem;color:#f2cf5b;margin-top:2px;white-space:nowrap}
 .layopt{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);background:var(--panel-2);cursor:pointer}
 .layopt:has(input:checked){border-color:var(--accent)}
 .layopt input{width:18px;height:18px;margin-top:2px;accent-color:var(--accent);flex:none}
@@ -1211,7 +1221,7 @@ function renderFillForm(){
 
       <div class="tablewrap"><table><thead><tr><th>#</th>${tm.cols.map(c => `<th>${esc(c.field)}</th>`).join('')}</tr></thead><tbody>
       ${tm.rows.map(r => `<tr><td class="n">${r}</td>${tm.cols.map(c => { const k = c.field + '|' + r; if (!tm.has.has(k)) return '<td class="muted">–</td>';
-        if (c.kind === 'team') return `<td>${teamSelect(k)}</td>`;
+        if (c.kind === 'team') { const tv = S.fill.teams[k], flagged = tv && S.xcheck && S.xcheck.id === t.id && S.xcheck.items.some(x => norm(x.r.team) === norm(tv.name) || (tv.id && matchTeam(x.r.team).id === tv.id)); return `<td>${teamSelect(k)}${flagged ? '<span class="xmark">⚠ cross-check kills</span>' : ''}</td>`; }
         if (c.kind === 'image') return `<td><input type="file" accept="image/*" data-img="${esc(k)}" aria-label="${esc(c.field + ' ' + r)}"></td>`;
         const auto = t.calc && t.calc.target === c.field;
         return `<td><input data-val="${esc(k)}" value="${esc(S.fill.values[k] ?? '')}" ${auto ? 'readonly title="Worked out automatically" style="opacity:.8"' : ''} aria-label="${esc(c.field + ' ' + r)}" inputmode="${/kill|point|pts|score|total|place|rank|#/i.test(c.field) ? 'decimal' : 'text'}"></td>`; }).join('')}</tr>`).join('')}
@@ -1245,6 +1255,7 @@ function wireFill(){
     const tk = e.target.dataset.team, ik = e.target.dataset.img;
     if (tk != null) { const v = e.target.value; if (!v) delete S.fill.teams[tk]; else if (v !== '__custom') { const t = teamById(v); S.fill.teams[tk] = {id: v, name: t ? t.name : ''}; } onFillChange(); }
     if (e.target.id === 'imp-file') { importFiles(e.target.files); e.target.value = ''; return; }
+    if (e.target.dataset.xcheck != null && IM) { const ffg = IM.grids.find(g => g.ff); const c = ffg && ffChecks(ffg)[+e.target.dataset.xcheck]; if (c) { const v = e.target.value === '' ? null : Math.max(0, Math.round(+e.target.value)); c.p.kills = v; c.p.ok = true; ffGrid(ffg); showImport(gridsToStats(IM.grids, scoringOf(S.cur)), IM.grids); toast('Updated. The totals now use your number.'); } return; }
     if (e.target.id === 'stack-toggle') { S.cur.stack = e.target.checked; queueSave(S.cur); toast(e.target.checked ? 'Stack points is on: new results add to the table.' : 'Stack points is off: new results replace the table.'); renderFillForm(); return; }
     if (e.target.id === 'ff-toggle') { const t = S.cur; const old = (t.scoring && t.scoring.ff === false) ? t.scoring : {}; t.scoring = {...old, ff: e.target.checked}; if (!e.target.checked && !old.pts) { t.scoring.pts = FF_OFFICIAL.pts.slice(); t.scoring.perKill = 1; } queueSave(t); renderFillForm(); toast(e.target.checked ? 'FF official scoring is on.' : 'FF official scoring is off. Set your own points below.'); return; }
     if (e.target.id === 'ff-pts' || e.target.id === 'ff-kill') { const t = S.cur; const pts = $('#ff-pts').value.split(/[,\s;]+/).map(num).filter(v => v != null); t.scoring = {ff: false, preset: 'custom', pts: pts.length ? pts : FF_OFFICIAL.pts.slice(), perKill: num($('#ff-kill').value) ?? 1}; queueSave(t); toast('Your points are saved for this template.'); return; }
@@ -2175,7 +2186,7 @@ function digitBlobs(src, x, y, w, h, loose){
     const inBlob = new Uint8Array(N); b.px.forEach(p => { inBlob[p] = 1; });
     for (let yy = b.y0; yy <= b.y1; yy++) for (let xx = b.x0; xx <= b.x1; xx++) { const gx = Math.min(GW - 1, Math.floor((xx - b.x0) * GW / bw)), gy = Math.min(GH - 1, Math.floor((yy - b.y0) * GH / bh)); cnt[gy * GW + gx]++; if (inBlob[yy * w + xx]) g[gy * GW + gx]++; }
     for (let k = 0; k < g.length; k++) g[k] = cnt[k] ? g[k] / cnt[k] : 0;
-    return {grid: Array.from(g, v => Math.round(v * 100) / 100), aspect: Math.round(bw / bh * 100) / 100, x: x + b.x0, h: bh, cy: y + (b.y0 + b.y1) / 2};
+    return {grid: Array.from(g, v => Math.round(v * 100) / 100), aspect: Math.round(bw / bh * 100) / 100, x: x + b.x0, h: bh, cy: y + (b.y0 + b.y1) / 2, loose: !!loose};
   });
 }
 /* Free Fire kill-number samples (0–9), cut from real result screens: digit, width/height, 8×12 ink grid */
@@ -2184,13 +2195,15 @@ window.FF_DIGITS = FF_DIGITS_RAW.split(';').map(t => ({v: +t[0], a: +t.slice(1, 
 /* nearest digit by ink grid and shape, against samples cut from real Free Fire screens */
 function readDigit(blob){
   if (!window.FF_DIGITS) return null;
-  let best = null, second = null;
+  const per = new Map();
   for (const t of FF_DIGITS) {
     let dd = 0; for (let k = 0; k < t.g.length; k++) { const e = blob.grid[k] - t.g[k]; dd += e * e; }
     dd += 6 * (blob.aspect - t.a) ** 2;
-    if (!best || dd < best.d) { second = best; best = {v: t.v, d: dd}; } else if (!second || dd < second.d) second = {v: t.v, d: dd};
+    if (!per.has(t.v) || dd < per.get(t.v)) per.set(t.v, dd);
   }
-  return best;
+  const r = [...per.entries()].sort((a, b) => a[1] - b[1]);
+  // d: how close the best digit is; d2: the nearest other digit (a small gap means it could be either)
+  return {v: r[0][0], d: r[0][1], d2: r[1] ? r[1][1] : 99};
 }
 const isYellow = (r, g, b, l, bg) => r > 120 && r - b > 55 && g - b > 38 && b < 150 && l > bg + 42; // yellow, even when washed out by compression; never white or beige text
 const isLightText = (r, g, b, l, bg) => l > bg + 55 && l > 120 && !(b < g * .5 && r - b > 90);
@@ -2298,7 +2311,7 @@ async function ffReadScreen(img, ocr){
         // names sit in the space between the previous "Eliminations" and this player's number
         const nameR = cx - eh * 2.3, nameL = ci === 0 ? nameR - cellMax + eh * .45 : Math.min(nameR - eh * 3, hc[0] + ew * 1.01);
         const name = inkCrop(cv, nameL, l.cy - eh * .9, nameR - nameL, eh * 1.8, isLightText, 40);
-        const slot = {tm, w, dig, name, blobs: digitBlobs(cv, dx0, dy0, eh * 2.75, eh * 2.3).filter(bl => bl.x < cx - eh * .2)}; slots.push(slot); tm.players.push(slot);
+        const slot = {tm, w, dig, name, blobs: digitBlobs(cv, dx0, dy0, eh * 2.75, eh * 2.3).filter(bl => bl.x < cx - eh * .2), view: {x: nameL - eh * .4, y: l.cy - eh * 1.3, w: cx + eh * 6.5 - (nameL - eh * .4), h: eh * 2.6}}; slots.push(slot); tm.players.push(slot);
       });
     }
   }
@@ -2324,17 +2337,33 @@ async function ffReadScreen(img, ocr){
     let dtxt = digitAt(i);
     // two-digit kills sit tight together; a mark further left (the end of a name) is not part of the number
     if (s.blobs && s.blobs.length >= 2) { const r = s.blobs[s.blobs.length - 1], l = s.blobs[s.blobs.length - 2]; s.blobs = (r.x - (l.x + l.aspect * l.h) < r.h * .35 && Math.abs(r.h - l.h) < r.h * .15) ? [l, r] : [r]; }
-    if (window.FF_DIGITS && s.blobs && s.blobs.length && s.blobs.length <= 2) { const r = s.blobs.map(readDigit); if (r.every(Boolean)) dtxt = r.map(x => x.v).join(''); }
+    let sure = false; s.flag = [];
+    if (window.FF_DIGITS && s.blobs && s.blobs.length && s.blobs.length <= 2) { const r = s.blobs.map(readDigit); if (r.every(Boolean)) { dtxt = r.map(x => x.v).join(''); sure = true;
+      if (r.some(x => x.d > 4.5)) s.flag.push('looks unusual');
+      if (r.some(x => x.d2 / Math.max(x.d, .001) < 1.8)) s.flag.push('could be another digit');
+      if (s.blobs.some(b => b.loose)) s.flag.push('faint'); } }
     if (dtxt.length > 2) dtxt = dtxt.slice(0, 2);
     if (dtxt === '' && s.dig && s.dig.aspect < .5) dtxt = '1'; // a lone thin stroke is a 1
     const pre = s.w ? s.w.pre.replace(/[QOo]/g, '0').replace(/[lI|!]/g, '1').replace(/\D/g, '') : '';
     s.kills = dtxt !== '' ? +dtxt : pre !== '' ? +pre : (s.dig ? null : 0);
     if (s.kills != null && s.kills > 40) s.kills = pre !== '' ? +pre : null;
+    if (s.kills == null) s.flag = ['could not be read'];
+    else if (!sure && s.dig) s.flag.push('read the slow way');
+    if (s.kills != null && s.kills >= 10) s.flag.push('10 or more');
+    if (s.flag.length) { // a zoomed cut-out so the number can be checked by eye
+      const v = s.view, vx = Math.max(0, v.x), vw = Math.min(W - vx, v.w), k = 64 / v.h, c = document.createElement('canvas'); c.width = Math.round(vw * k); c.height = 64;
+      c.getContext('2d').drawImage(cv, vx, v.y, vw, v.h, 0, 0, c.width, c.height); s.img = c.toDataURL('image/jpeg', .8);
+    } else s.flag = null;
     s.player = nw.filter(w => ns.rowOf(w.y + w.h / 2) === i).sort((a, b) => a.x - b.x).map(w => w.text).join(' ').trim()
       .replace(/^(?:[^\p{L}\p{N}]+|[\p{L}\p{N}]\s|[a-z]{1,3}\s?(?=[A-Z]{2,}[.\s]))+/u, '').trim(); // stray marks at the crop edge
   });
-  return teams.map(t => ({place: t.place, ...(o => ({team: o.tag, conf: o.conf}))(teamTag(t.players.map(p => p.player))), kills: t.players.reduce((n, p) => n + (p.kills || 0), 0), unread: t.players.some(p => p.kills == null), players: t.players.map(p => ({name: p.player, kills: p.kills, blobs: window.__ffDebug ? p.blobs : undefined}))}));
+  return teams.map(t => ({place: t.place, ...(o => ({team: o.tag, conf: o.conf}))(teamTag(t.players.map(p => p.player))), kills: t.players.reduce((n, p) => n + (p.kills || 0), 0), unread: t.players.some(p => p.kills == null), players: t.players.map(p => ({name: p.player, kills: p.kills, flag: p.flag, img: p.img, blobs: window.__ffDebug ? p.blobs : undefined}))}));
 }
+function ffGrid(g){
+  g.ff.rows.forEach(r => { r.kills = r.players.reduce((n, p) => n + (p.kills || 0), 0); });
+  g.grid = [['Team', 'Match', 'Placement', 'Kills'], ...g.ff.rows.map(r => [r.team || 'Team ' + r.place, String(r.match), String(r.place), String(r.kills)])];
+}
+const ffChecks = g => g.ff.rows.flatMap(r => r.players.filter(p => p.flag).map(p => ({r, p})));
 async function ocrImages(files){
   if (!window.Tesseract) { setImportMsg('Getting the screenshot reader ready (first time only)…'); await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'); }
   let idx = 0;
@@ -2357,8 +2386,8 @@ async function ocrImages(files){
     const out = [];
     if (ff.length) {
       ffMergeTags(ff);
-      const unread = ff.filter(r => r.unread).length;
-      out.push({name: 'Free Fire screens', grid: [['Team', 'Match', 'Placement', 'Kills'], ...ff.map(r => [r.team || 'Team ' + r.place, String(r.match), String(r.place), String(r.kills)])], ocr: true, ff: {matches: new Set(ff.map(r => r.match)).size, unread}});
+      const g = {name: 'Free Fire screens', ocr: true, ff: {matches: new Set(ff.map(r => r.match)).size, rows: ff}};
+      ffGrid(g); out.push(g);
     }
     if (all.length) out.push({name: 'screenshot', grid: all, ocr: true});
     if (!out.length) throw new Error('no results table could be read from the screenshot. Try a sharper, uncropped screenshot.');
@@ -2453,7 +2482,8 @@ function showImport(st, grids){
   };
   const previewCols = st.mode === 'matches' ? [['Wins', x => x.wins], ['Kills', x => x._hasKills ? x.kills : '–'], ['KP', x => x.kp], ['PP', x => x.pp], ['Total', x => x.total]] : heads.map(h => [h, x => x.extra[norm(h)] ?? '']);
   const ffg = grids.find(g => g.ff);
-  const ffNote = ffg ? `<p class="help">Read <b>${ffg.ff.matches} Free Fire match screen${ffg.ff.matches === 1 ? '' : 's'}</b>. Each team is named by the tag its players share, and its placement and kills are scored with ${scoringOf(t).ff ? 'FF official scoring' : 'your points'}.${ffg.ff.unread ? ` <b>In ${ffg.ff.unread} team result${ffg.ff.unread === 1 ? '' : 's'} a player's kill number could not be read</b> and was counted as 0, so check the kills.` : ''}</p>` : '';
+  const checks = ffg ? ffChecks(ffg) : [];
+  const ffNote = ffg ? `<p class="help">Read <b>${ffg.ff.matches} Free Fire match screen${ffg.ff.matches === 1 ? '' : 's'}</b>. Each team is named by the tag its players share, and its placement and kills are scored with ${scoringOf(t).ff ? 'FF official scoring' : 'your points'}.</p>${checkList(checks, true)}` : '';
   box.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center;margin-top:10px"><span class="lab">Results read</span><button class="btn sm ghost" data-act="imp-cancel">✕ Don't use these</button></div>${ffNote}${t.stack ? '<p class="help"><b>Stack points is on:</b> these are added to the standings already in the table.</p>' : ''}<p class="help"><b>${st.teams.length} teams</b> read${st.mode === 'matches' ? ` from <b>${st.nMatches || 'several'} match${st.nMatches === 1 ? '' : 'es'}</b>, added up with your scoring rules` : ''}, sorted by Total. ${ocr ? '<b>Read from a screenshot: check the names and numbers below.</b> You can correct anything in the table afterwards.' : ''} ${st.notes.join(' ')}</p>
     <div class="tablewrap"><table><thead><tr><th>#</th><th>Team</th>${previewCols.map(([h]) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${st.teams.slice(0, 24).map(x => `<tr><td class="n">${x.rank}</td><td>${esc(x.team)}${(() => { const m = matchTeam(x.team); return m && m.id ? (norm(m.name) !== norm(x.team) ? ` <span class="chip lime">→ ${esc(m.name)}</span>` : '') : ' <span class="chip">no logo</span>'; })()}</td>${previewCols.map(([, f]) => `<td>${esc(f(x))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
     ${cols.length ? `<div class="form" style="gap:8px"><span class="lab">Which result goes in each column of your template</span>${cols.map((c, i) => { const g = guess(c, i); return `<div class="row" style="flex-wrap:nowrap"><span style="min-width:90px;font-weight:700">${esc(c.field)}</span><select id="imp-map-${i}" data-field="${esc(c.field)}" aria-label="Source for ${esc(c.field)}">${srcs.map(([v, l]) => `<option value="${esc(v)}" ${v === g ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`; }).join('')}</div>` : ''}
@@ -2472,6 +2502,7 @@ function applyImport(decided){
   if (t.calc && map[t.calc.target] && (st.hasTotal || String(map[t.calc.target]).startsWith('x:'))) { t.calc = null; calcNote = ' Auto total was turned off because the totals came from your results.'; }
   const teamCol = tm.cols.find(c => c.kind === 'team');
   S.undo = {id: t.id, values: JSON.parse(JSON.stringify(S.fill.values)), teams: JSON.parse(JSON.stringify(S.fill.teams)), calc: t.calc ? {...t.calc} : null};
+  { const ffg = IM.grids && IM.grids.find(g => g.ff); const left = ffg ? ffChecks(ffg).filter(c => !c.p.ok) : []; S.xcheck = left.length ? {id: t.id, items: left} : null; }
   let rowsIn = st.teams;
   if (t.stack && teamCol) {
     // continuous games: add the new results onto the standings already in the table, then re-rank
@@ -2580,7 +2611,20 @@ function importCard(t){
       <button type="button" class="qbtn" data-act="stack-help" aria-label="How stacking points works">?</button>
       <label class="switch" title="Stack points"><input type="checkbox" id="stack-toggle" ${t.stack ? 'checked' : ''} aria-label="Stack points"><span></span></label></div>
     ${S.undo && S.undo.id === t.id ? '<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="imp-undo">Undo last import</button></div>' : ''}
+    ${S.xcheck && S.xcheck.id === t.id ? checkList(S.xcheck.items, false) : ''}
     <div id="imp-result"></div></div></details>`;
+}
+/* numbers the reader was not sure about: a cut-out of the screenshot, what it read, and a box to correct it */
+function checkList(checks, editable){
+  if (!checks.length) return '';
+  const open = checks.filter(c => !c.p.ok).length;
+  return `<div class="xcheck"><p class="xhead">⚠ Cross-check ${checks.length === 1 ? 'this number' : `these ${checks.length} numbers`} manually</p>
+    <p class="help" style="margin:0 0 8px">The reader was not sure about ${checks.length === 1 ? 'this one' : 'these'}. Compare each with the cut-out of your screenshot${editable ? ' and fix it here before you put the results on the graphic' : ''}.</p>
+    ${checks.map((c, i) => `<div class="xitem${c.p.ok ? ' ok' : ''}"><img alt="" src="${c.p.img}">
+      <div class="xline"><span><b>${esc(c.r.team || 'Team ' + c.r.place)}</b> · match ${c.r.match} · ${esc(c.p.name || 'player')}<br><small>${esc(c.p.flag.join(', '))}</small></span>
+      ${editable ? `<label class="xfix">Kills <input type="number" min="0" max="40" inputmode="numeric" data-xcheck="${i}" value="${c.p.kills ?? ''}"></label>` : `<span class="xread">read as <b>${c.p.kills ?? '?'}</b></span>`}</div></div>`).join('')}
+    ${editable ? '' : '<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="xcheck-done">Done checking</button></div>'}
+    ${editable && open ? `<p class="help" style="margin-top:6px">${open} still to confirm. Changing a box confirms it.</p>` : ''}</div>`;
 }
 function stackHelp(){
   $('#modal-title').textContent = 'Stack points';
@@ -2773,6 +2817,7 @@ async function act(a, el){
     case 'restore-original': restoreOriginal(); break;
     case 'imp-text': importText(); break;
     case 'imp-apply': applyImport(); break;
+    case 'xcheck-done': S.xcheck = null; renderFillForm(); toast('Marked as checked.'); break;
     case 'imp-cancel': IM = null; $('#imp-result').innerHTML = ''; setImportMsg(''); toast('Those results were not used.'); break;
     case 'stack-help': stackHelp(); break;
     case 'imp-undo': if (S.undo && S.cur && S.undo.id === S.cur.id) { S.fill.values = S.undo.values; S.fill.teams = S.undo.teams; if (S.undo.calc !== undefined) S.cur.calc = S.undo.calc; S.undo = null; saveFill(); queueSave(S.cur); renderFillForm(); onFillChange(); toast('Last import undone.'); } break;
