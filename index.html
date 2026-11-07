@@ -192,9 +192,14 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;backgrou
 .overlay.drawing{touch-action:none;cursor:crosshair}
 .box{position:absolute;border:2px dashed var(--spot);background:rgba(110,231,183,.07);touch-action:none;cursor:move;min-width:6px;min-height:6px}
 .box.sel{border-style:solid;background:rgba(110,231,183,.15);box-shadow:0 0 0 1px rgba(0,0,0,.7)}
-.box .lbl{position:absolute;left:-2px;top:-19px;font-family:var(--label);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:var(--spot);color:var(--accent-ink);padding:1px 6px;white-space:nowrap;pointer-events:none;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.box .lbl{display:none;position:absolute;left:-2px;top:-19px;font-family:var(--label);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:var(--spot);color:var(--accent-ink);padding:1px 6px;white-space:nowrap;pointer-events:none;max-width:220px;overflow:hidden;text-overflow:ellipsis}
 .box .handle{position:absolute;right:-12px;bottom:-12px;width:24px;height:24px;border-radius:50%;background:var(--spot);border:3px solid #07090d;cursor:nwse-resize}
 .box.ghost{border-style:solid;pointer-events:none}
+.edtools{flex-wrap:wrap;gap:6px}
+.more{position:relative}
+.more>summary{list-style:none}
+.more>summary::-webkit-details-marker{display:none}
+.more-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;display:flex;flex-direction:column;gap:8px;padding:10px;background:var(--panel);border:1px solid var(--line-2);min-width:220px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .chips button{background:var(--panel);border:1px solid var(--line);padding:5px 10px;font-family:var(--label);font-weight:700;font-size:.82rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;color:var(--muted)}
 .chips button.on{border-color:var(--accent);color:var(--text)}
@@ -313,14 +318,19 @@ html.modal-open .modal .card{touch-action:pan-y}
       <button class="btn primary" data-act="to-fill">Fill in results →</button>
     </div>
     <div class="bar edpages" id="ed-pages"></div>
-    <div class="bar">
-      <button class="btn" id="draw-btn" data-act="draw">＋ Draw spot</button>
-      <button class="btn sm" data-act="zoom-out" aria-label="Zoom out">−</button>
-      <button class="btn sm" data-act="zoom-fit">Fit</button>
-      <button class="btn sm" data-act="detect">Find spots</button>
-      <button class="btn sm ghost hidden" id="restore-btn" data-act="restore-original">Restore original design</button>
-      <button class="btn sm" data-act="zoom-in" aria-label="Zoom in">＋</button>
-      <label class="btn sm file-btn" for="replace-img"><input type="file" id="replace-img" accept="image/png,image/jpeg,image/webp">Replace design image</label>
+    <div class="bar edtools">
+      <button class="btn sm" data-act="undo" id="undo-btn" aria-label="Undo">↶ Undo</button>
+      <button class="btn sm" data-act="redo" id="redo-btn" aria-label="Redo">↷ Redo</button>
+      <button class="btn sm" id="draw-btn" data-act="draw">＋ Add spot</button>
+      <button class="btn sm danger hidden" id="del-btn" data-act="del-zone">Delete spot</button>
+      <button class="btn sm" data-act="detect">Find spots again</button>
+      <details class="more"><summary class="btn sm ghost">More ▾</summary>
+        <div class="more-menu">
+          <div class="row"><button class="btn sm" data-act="zoom-out" aria-label="Zoom out">−</button><button class="btn sm" data-act="zoom-fit">Fit</button><button class="btn sm" data-act="zoom-in" aria-label="Zoom in">＋</button></div>
+          <label class="btn sm file-btn" for="replace-img"><input type="file" id="replace-img" accept="image/png,image/jpeg,image/webp">Replace design image</label>
+          <button class="btn sm ghost hidden" id="restore-btn" data-act="restore-original">Restore original design</button>
+          <button class="btn sm ghost" data-act="show-repeat">Copy a row down</button>
+        </div></details>
     </div>
     <div class="ed">
       <div>
@@ -330,8 +340,8 @@ html.modal-open .modal .card{touch-action:pan-y}
             <div class="overlay" id="ed-overlay"></div>
           </div>
         </div>
-        <div class="chips" id="ed-chips"></div>
-        <details class="card" id="repeat" style="margin-top:12px">
+        <div class="chips hidden" id="ed-chips"></div>
+        <details class="card hidden" id="repeat" style="margin-top:12px">
           <summary>Repeat a row (standings tables)</summary>
           <p class="help">Mark row 1 of your table (team, logo, kills, points…), set each spot's Row to 1, then copy it down for the other rows. Existing spots in those rows are replaced.</p>
           <div class="grid4">
@@ -902,13 +912,34 @@ const zoneById = id => S.cur && S.cur.zones.find(z => z.id === id);
 const selZone = () => S.sel ? zoneById(S.sel) : null;
 const saveT = {}, saving = {};
 function setStatus(s){ $('#ed-status').textContent = s; const d = $('#store-badge'); if (d && S.store) d.classList.toggle('saving', /Saving/.test(s)); }
+/* undo / redo for the spots: every burst of changes becomes one step */
+const HIST = {id: null, undo: [], redo: [], last: null, timer: null};
+function histReset(t){ HIST.id = t ? t.id : null; HIST.undo = []; HIST.redo = []; HIST.last = t ? JSON.stringify(t.zones) : null; clearTimeout(HIST.timer); histButtons(); }
+function histNote(t){
+  if (!t || HIST.id !== t.id || HIST.busy) return;
+  clearTimeout(HIST.timer);
+  HIST.timer = setTimeout(() => { const now = JSON.stringify(t.zones); if (now !== HIST.last) { HIST.undo.push(HIST.last); if (HIST.undo.length > 80) HIST.undo.shift(); HIST.redo = []; HIST.last = now; histButtons(); } }, 350);
+}
+function histStep(dir){
+  const t = S.cur; if (!t || HIST.id !== t.id) return;
+  clearTimeout(HIST.timer); const now = JSON.stringify(t.zones); if (now !== HIST.last) { HIST.undo.push(HIST.last); HIST.redo = []; HIST.last = now; }
+  const from = dir < 0 ? HIST.undo : HIST.redo, to = dir < 0 ? HIST.redo : HIST.undo;
+  if (!from.length) return;
+  to.push(HIST.last); const z = from.pop(); HIST.last = z;
+  HIST.busy = true; t.zones = JSON.parse(z); S.sel = t.zones.some(q => q.id === S.sel) ? S.sel : null;
+  renderBoxes(); renderPanel(); renderChips(); previewEditor(); queueSave(t); HIST.busy = false;
+  const d = $('#del-btn'); if (d) d.classList.toggle('hidden', !S.sel); histButtons();
+}
+function histButtons(){ const u = $('#undo-btn'), r = $('#redo-btn'); if (u) u.disabled = !HIST.undo.length; if (r) r.disabled = !HIST.redo.length; }
 function queueSave(t){
+  if (S.view === 'edit' && S.cur === t) histNote(t);
   if (t.example) { setStatus('Example: changes are not saved'); return; }
   t.updatedAt = Date.now(); setStatus('Saving…');
   clearTimeout(saveT[t.id]); saveT[t.id] = setTimeout(() => doSave(t), 800);
 }
 function queueSaveNow(t){ t.updatedAt = Date.now(); doSave(t); }
 async function doSave(t){
+  if (S.view === 'edit' && S.cur === t) histNote(t);
   if (saving[t.id]) { saving[t.id] = 'again'; return; }
   saving[t.id] = true;
   try { await S.store.put('templates', t.id, t); if (S.cur === t) setStatus('Saved'); }
@@ -917,6 +948,7 @@ async function doSave(t){
 }
 function openEditor(t){
   S.cur = t; S.sel = null; S.drawMode = false; S.fit = true;
+  if (HIST.id !== t.id) histReset(t);
   showView('edit');
   $('#ed-name').value = t.name; $('#ed-name').disabled = !!t.example;
   setStatus(t.example ? 'Example: changes are not saved' : 'Saved');
@@ -942,15 +974,15 @@ function boxLabel(z){ return `${TYPE_SHORT[z.type]}: ${z.field}${z.row ? ' #' + 
 function renderBoxes(){
   if (!S.cur) return;
   const s = S.scale;
-  $('#ed-overlay').innerHTML = S.cur.zones.map(z => `<div class="box${z.id === S.sel ? ' sel' : ''}" data-id="${esc(z.id)}" style="left:${z.x*s}px;top:${z.y*s}px;width:${z.w*s}px;height:${z.h*s}px"><span class="lbl">${esc(boxLabel(z))}</span>${z.id === S.sel ? '<span class="handle" aria-hidden="true"></span>' : ''}</div>`).join('');
+  $('#ed-overlay').innerHTML = S.cur.zones.map(z => `<div class="box${z.id === S.sel ? ' sel' : ''}" data-id="${esc(z.id)}" style="left:${z.x*s}px;top:${z.y*s}px;width:${z.w*s}px;height:${z.h*s}px"><span class="lbl"></span>${z.id === S.sel ? '<span class="handle" aria-hidden="true"></span>' : ''}</div>`).join('');
 }
 function placeBox(z){ const el = $(`#ed-overlay .box[data-id="${CSS.escape(z.id)}"]`); if (!el) return; const s = S.scale; Object.assign(el.style, {left: z.x*s + 'px', top: z.y*s + 'px', width: z.w*s + 'px', height: z.h*s + 'px'}); }
 function renderChips(){
   if (!S.cur) return;
   $('#ed-chips').innerHTML = S.cur.zones.map(z => `<button data-sel="${esc(z.id)}" class="${z.id === S.sel ? 'on' : ''}">${esc(boxLabel(z))}</button>`).join('');
 }
-function updateDrawBtn(){ const b = $('#draw-btn'); b.classList.toggle('on', S.drawMode); b.textContent = S.drawMode ? 'Drag over the design…' : '＋ Draw spot'; $('#ed-overlay').classList.toggle('drawing', S.drawMode); }
-function selectZone(id){ S.sel = id; renderBoxes(); renderPanel(); renderChips(); }
+function updateDrawBtn(){ const b = $('#draw-btn'); b.classList.toggle('on', S.drawMode); b.textContent = S.drawMode ? 'Drag over the design…' : '＋ Add spot'; $('#ed-overlay').classList.toggle('drawing', S.drawMode); }
+function selectZone(id){ S.sel = id; renderBoxes(); renderPanel(); renderChips(); const d = $('#del-btn'); if (d) d.classList.toggle('hidden', !id); }
 const previewEditor = throttle(() => (S.cur && S.view === 'edit') ? renderTo($('#ed-canvas'), S.cur, {values:{}, teams:{}, images:{}}, {preview: true}) : null, 50);
 function fieldNames(){ return [...new Set((S.cur ? S.cur.zones : []).map(z => z.field).filter(Boolean))]; }
 function nextField(type){
@@ -968,8 +1000,8 @@ function renderPanel(){
   const z = selZone(), el = $('#ed-panel');
   if (!z) {
     el.innerHTML = `<div class="card"><h3>Mark the spots</h3>
-      <p class="help">Tap <b>Draw spot</b>, then drag over each area where something changes: a team name, a logo, a score, kills, points. Tap a spot to choose what goes there and how it looks. Drag a spot to move it; drag the round handle to resize.</p>
-      <p class="help">Spots with the same <b>name</b> share one entry. Use <b>Team A</b> and <b>Team B</b> for the logo and name spots of each side, so picking a team fills both.</p>
+      <p class="help">Each green box is a spot where results go. <b>Tap</b> a box to change what goes there or how it looks, <b>drag</b> it to move it, and drag its round handle to resize it.</p>
+      <p class="help"><b>Add spot</b> draws a new one. Made a mistake? Use <b>Undo</b>. If the boxes are in the wrong places, tap <b>Find spots again</b>.</p>
       <p class="help">${S.cur.zones.length} spot${S.cur.zones.length === 1 ? '' : 's'} marked.</p></div>
       ${S.cur.zones.some(z => TEXT_TYPES.includes(z.type)) ? '<div class="card" style="margin-top:12px"><h3>Text style</h3><div id="style-ed"></div></div>' : ''}`;
     renderStyleCards();
@@ -1760,8 +1792,8 @@ All numbers are fractions of the image width (x, w) or height (y, h), from the t
 }
 
 const PRESETS = [
-  {label: 'Any game', cols: ['Team', 'Wins', 'KP', 'PP', 'Total']},
   {label: 'Free Fire', cols: ['Team', 'Booyah', 'KP', 'PP', 'Total']},
+  {label: 'Any game', cols: ['Team', 'Wins', 'KP', 'PP', 'Total']},
   {label: 'PUBG Mobile / BGMI', cols: ['Team', 'WWCD', 'Elims', 'Place Pts', 'Total']},
   {label: 'Any game', cols: ['Team', 'Matches', 'Wins', 'Kills', 'Total']},
   {label: 'Any game', cols: ['Team', 'Kills', 'Points', 'Total']},
@@ -2806,6 +2838,9 @@ async function act(a, el){
     case 'zoom-out': S.fit = false; S.scale = Math.max(.05, S.scale / 1.4); layoutStage(); break;
     case 'zoom-fit': S.fit = true; layoutStage(); break;
     case 'dup-zone': { const z = selZone(); if (!z) break; const n = Object.assign({}, z, {id: uid(), x: z.x + 20, y: z.y + 20}); S.cur.zones.push(n); selectZone(n.id); previewEditor(); queueSave(S.cur); break; }
+    case 'undo': histStep(-1); break;
+    case 'redo': histStep(1); break;
+    case 'show-repeat': { const r = $('#repeat'); r.classList.remove('hidden'); r.open = true; r.scrollIntoView({behavior: 'smooth', block: 'start'}); el.closest('details').open = false; break; }
     case 'del-zone': { if (!S.sel) break; S.cur.zones = S.cur.zones.filter(z => z.id !== S.sel); selectZone(null); previewEditor(); queueSave(S.cur); break; }
     case 'deselect': selectZone(null); break;
     case 'nudge': { const z = selZone(); if (!z) break; const [dx, dy] = el.dataset.d.split(',').map(Number); const st = Math.max(1, Math.round(2 / S.scale)); z.x += dx * st; z.y += dy * st; placeBox(z); renderPanel(); previewEditor(); queueSave(S.cur); break; }
