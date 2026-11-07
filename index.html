@@ -97,6 +97,12 @@ input[type=file]{font-size:.85rem;max-width:100%}
 .fftable{width:100%;border-collapse:collapse;margin:6px 0 10px;font-size:.88rem}
 .fftable td{padding:5px 8px;border-bottom:1px solid var(--line)}
 .fftable td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.layopt{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);background:var(--panel-2);cursor:pointer}
+.layopt:has(input:checked){border-color:var(--accent)}
+.layopt input{width:18px;height:18px;margin-top:2px;accent-color:var(--accent);flex:none}
+.layopt b{display:block;font-family:var(--label)}
+.layopt small{display:block;color:var(--muted);font-size:.8rem;margin-top:3px;line-height:1.4}
+.layall{display:flex;flex-direction:column;gap:8px;padding:4px 0 0 30px}
 .ffcustom{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:8px;margin-top:8px}
 .seg{display:flex;border:1px solid var(--line)}
 .seg button{flex:1;background:#0a0d12;border:0;padding:8px 6px;font-family:var(--label);font-size:.85rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer;min-height:40px}
@@ -318,6 +324,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
     <div class="fill">
       <div class="preview">
         <div class="pv"><canvas id="fill-canvas"></canvas></div>
+        <div class="row hidden" id="fill-pages" style="justify-content:center"><button class="btn sm" data-act="pg-prev" aria-label="Previous page">‹</button><span id="pg-label" class="small" style="min-width:96px;text-align:center"></span><button class="btn sm" data-act="pg-next" aria-label="Next page">›</button></div>
         <div class="row">
           <button class="btn primary" data-act="download" id="dl-btn">Download PNG</button>
           <button class="btn ghost" data-act="clear-fill">Clear entries</button>
@@ -404,6 +411,15 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
     <p class="help" id="dt-replace"></p>
     <div class="row"><button class="btn primary" data-act="detect-apply">Set up the spots</button><button class="btn ghost" data-act="detect-cancel">I'll mark them myself</button></div>
     <p class="help" id="dt-claude">Not right? <button class="btn sm" data-act="ask-claude">Ask Claude to look instead</button></p>
+  </div>
+</div>
+<div id="layout-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="lay-title">
+  <div class="card">
+    <h3 id="lay-title">How many teams?</h3>
+    <p class="help" id="lay-summary"></p>
+    <div id="lay-opts" class="form" style="gap:8px;margin-top:10px"></div>
+    <p class="help hidden" id="lay-rank" style="margin-top:10px">Your rank numbers are printed in the design, so extra rows and pages would repeat them. To number every team, go to Mark spots, draw a spot over the first rank number, name it Rank, set Row to 1 and copy it down. The app then covers the printed numbers and writes the right ones.</p>
+    <div class="row" style="margin-top:12px"><button class="btn primary" data-act="lay-go">Fill the table</button><button class="btn ghost" data-act="lay-cancel">Cancel</button></div>
   </div>
 </div>
 <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
@@ -621,6 +637,19 @@ function drawPlaceholder(ctx, z, label){
   ctx.fillStyle = 'rgba(110,231,183,.95)'; ctx.font = `700 ${Math.max(10, r / 3)}px "Bricolage Grotesque", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(label, z.x + z.w / 2, z.y + z.h / 2); ctx.restore();
 }
+function coverCell(ctx, z){
+  try {
+    const x = Math.round(z.x), y = Math.round(z.y), w = Math.round(z.w), h = Math.round(z.h); if (w < 4 || h < 4) return;
+    const top = ctx.getImageData(x, y, w, 1).data, bot = ctx.getImageData(x, y + h - 1, w, 1).data, lft = ctx.getImageData(x, y, 1, h).data, rgt = ctx.getImageData(x + w - 1, y, 1, h).data;
+    const px = []; for (const a of [top, bot, lft, rgt]) for (let i = 0; i < a.length; i += 4) px.push([a[i], a[i+1], a[i+2]]);
+    const m = k => { const v = px.map(c => c[k]).sort((p, q) => p - q); return v[v.length >> 1]; };
+    const c = [m(0), m(1), m(2)];
+    // only cover when the edge is one flat colour (a cell), never a photo or gradient
+    const flat = px.filter(q => Math.abs(q[0]-c[0]) + Math.abs(q[1]-c[1]) + Math.abs(q[2]-c[2]) < 40).length / px.length;
+    if (flat < .8) return;
+    ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+  } catch (e) {}
+}
 async function renderTo(cv, t, data, opts = {}){
   const gen = (cv._gen = (cv._gen || 0) + 1);
   const plan = t.zones.map(z => resolveZone(z, data, opts));
@@ -639,6 +668,8 @@ async function renderTo(cv, t, data, opts = {}){
   // every row of a table column shares one text size: the size the longest entry needs
   const colSize = {};
   for (const p of plan) if (p.text && p.z.row > 0 && p.z.fit !== false) { const k = p.z.field + '|' + p.z.type; const sz = fitSize(ctx, p.z, p.text); colSize[k] = Math.min(colSize[k] ?? Infinity, sz); }
+  // rank spots cover the number printed in the design (sampled cell colour), so every row can be renumbered
+  for (const p of plan) if (p.z.row > 0 && p.z.type === 'text' && roleOf(p.z.field) === 'rank' && (p.text || String(p.z.id).startsWith('rank-auto'))) coverCell(ctx, p.z);
   for (const p of plan) {
     if (p.img) drawContain(ctx, p.z, p.img);
     else if (p.placeholder) drawPlaceholder(ctx, p.z, p.placeholder);
@@ -666,6 +697,12 @@ async function offerDownload(blob, filename){
   const url = URL.createObjectURL(blob);
   $('#modal-title').textContent = filename; $('#modal-help').textContent = 'Press and hold the image, then choose Download image.';
   $('#modal-body').innerHTML = `<img src="${url}" alt="${esc(filename)}">`;
+  $('#modal').classList.remove('hidden');
+}
+async function offerMany(files){
+  if (S.downloads || !window.claude) { for (const f of files) { await offerDownload(f.blob, f.name); await new Promise(r => setTimeout(r, 400)); } return; }
+  $('#modal-title').textContent = `${files.length} pages`; $('#modal-help').textContent = 'Press and hold each image, then choose Download image.';
+  $('#modal-body').innerHTML = files.map(f => `<p class="lab" style="margin:10px 0 6px">${esc(f.name)}</p><img src="${URL.createObjectURL(f.blob)}" alt="${esc(f.name)}">`).join('');
   $('#modal').classList.remove('hidden');
 }
 function countMade(n){ try { localStorage.setItem('mds-made', String((+localStorage.getItem('mds-made') || 0) + n)); } catch (e) {} }
@@ -708,7 +745,7 @@ function renderTemplates(){
       <div class="thumb"><img alt="" data-ref="${esc(t.image.ref)}"></div>
       <div class="tbody">
         <div class="tname" id="tn-${esc(t.id)}">${esc(t.name)}</div>
-        <div class="meta">${t.zones.length} spot${t.zones.length === 1 ? '' : 's'} · ${t.image.w}×${t.image.h}${tableModel(t).rows.length ? ` · ${tableModel(t).rows.length} rows` : ''}</div>
+        <div class="meta">${t.zones.length} spot${t.zones.length === 1 ? '' : 's'} · ${t.image.w}×${t.image.h}${tableModel(t, true).rows.length ? ` · ${tableModel(t, true).rows.length} rows` : ''}</div>
         <div class="row">
           <button class="btn primary sm" data-act="open-fill" data-id="${esc(t.id)}">Fill in results</button>
           <button class="btn sm" data-act="open-edit" data-id="${esc(t.id)}">Mark spots</button>
@@ -955,13 +992,18 @@ function fieldsOf(t){
   }
   return [...map.values()];
 }
-function tableModel(t){
+function tableModel(t, baseOnly){
   const rowF = fieldsOf(t).filter(f => f.row);
   const rows = [...new Set(rowF.map(f => f.row))].sort((a, b) => a - b);
   const cols = [];
   for (const f of rowF) { let c = cols.find(c => c.field === f.field); if (!c) { c = {field: f.field, kind: f.kind}; cols.push(c); } else if (f.kind === 'team') c.kind = 'team'; }
-  return {rows, cols, has: new Set(rowF.map(f => f.key))};
+  const has = new Set(rowF.map(f => f.key)), base = rows.length;
+  // "all teams" layouts add rows beyond the design's own rows (a long graphic or extra pages)
+  const n = baseOnly ? 0 : extraCount(t, base);
+  if (n) { const last = rows[rows.length - 1], lf = rowF.filter(f => f.row === last); for (let r = last + 1; r <= last + n; r++) { rows.push(r); lf.forEach(f => has.add(f.field + '|' + r)); } }
+  return {rows, cols, has, base};
 }
+function extraCount(t, base){ const L = t && t.layout; return (L && (L.mode === 'long' || L.mode === 'pages') && base && L.n > base) ? Math.min(L.n, 80) - base : 0; }
 const fillKey = t => 'mds-fill-' + t.id;
 function loadFill(t){
   try { const v = JSON.parse(localStorage.getItem(fillKey(t)) || 'null'); if (v) return {values: v.values || {}, teams: v.teams || {}, images: {}}; } catch (e) {}
@@ -985,9 +1027,115 @@ function rankedFill(t, data){
   const out = {values: Object.assign({}, data.values), teams: Object.assign({}, data.teams), images: Object.assign({}, data.images)};
   const set = (o, k, v) => { if (v === undefined) delete o[k]; else o[k] = v; };
   tm.rows.forEach((r, i) => tm.cols.forEach(c => { const k = c.field + '|' + r, x = order[i].cells[c.field]; set(out.values, k, x.v); set(out.teams, k, x.t); set(out.images, k, x.im); }));
+  const rankF = tm.cols.find(c => c.kind === 'text' && roleOf(c.field) === 'rank');
+  if (rankF) { const pad = recs.some(x => /^0\d/.test(String((x.cells[rankF.field] || {}).v || ''))); tm.rows.forEach((r, i) => { if (!order[i].empty) out.values[rankF.field + '|' + r] = String(i + 1).padStart(pad ? 2 : 1, '0'); }); }
   return out;
 }
-const previewFill = throttle(() => (S.cur && S.view === 'fill') ? renderTo($('#fill-canvas'), S.cur, rankedFill(S.cur, S.fill), {}) : null, 50);
+/* what gets drawn: the design as it is, one long version with extra rows, or several pages */
+function rowGeom(t){
+  const tm = tableModel(t, true); if (tm.rows.length < 2) return null;
+  const tops = tm.rows.map(r => { const zs = t.zones.filter(z => z.row === r); return {r, top: Math.min(...zs.map(z => z.y)), bot: Math.max(...zs.map(z => z.y + z.h))}; });
+  const d = tops.slice(1).map((x, i) => x.top - tops[i].top).sort((a, b) => a - b), pitch = d[d.length >> 1];
+  if (!(pitch > 4)) return null;
+  const span = Math.max(...tops.map(x => x.bot - x.top)), off = Math.max(0, Math.floor((pitch - span) / 2));
+  return {rows: tm.rows, tops, pitch, off};
+}
+const LONG = new Map(), RANKC = new Map();
+/* a cell left of the team names with a number printed in it, in every row (like the # column) */
+async function findRankCell(t){
+  const tm = tableModel(t, true);
+  if (tm.cols.some(c => roleOf(c.field) === 'rank')) return null;
+  const key = [t.id, t.image.ref, JSON.stringify(t.zones).length].join('|'); if (RANKC.has(key)) return RANKC.get(key);
+  let out = null;
+  try {
+    const img = await loadImage(t.image.ref), g = rowGeom(t); if (!img || !g) { RANKC.set(key, null); return null; }
+    const P = pixelsOf(img, 1400), {w, d, s} = P;
+    const rowZ = r => t.zones.filter(z => z.row === r);
+    const teamX = Math.min(...t.zones.filter(z => z.row > 0 && (z.type === 'teamName' || z.type === 'teamTag')).map(z => z.x).concat([Infinity]));
+    const leftX = Math.min(teamX, ...t.zones.filter(z => z.row > 0 && z.type === 'teamLogo').map(z => z.x));
+    if (!isFinite(leftX)) { RANKC.set(key, null); return null; }
+    const xmax = Math.round(leftX * s);
+    const segs = y => { const o = []; let x = 0; while (x < xmax) { const i0 = (y * w + x) * 4, ref = [d[i0], d[i0+1], d[i0+2]]; let xx = x + 1; for (; xx < xmax; xx++) if (cdist(d, (y * w + xx) * 4, ref) >= 30) break; o.push({x0: x, x1: xx - 1, c: ref}); x = xx; } return o; };
+    const cands = [];
+    g.tops.forEach(tp => {
+      const zs = rowZ(tp.r), top = Math.min(...zs.map(z => z.y)) * s, h = (Math.max(...zs.map(z => z.y + z.h)) * s) - top;
+      const a = segs(Math.round(top + h * .12)), b = segs(Math.round(top + h * .88));
+      a.forEach(sg => {
+        const n = sg.x1 - sg.x0 + 1; if (n < h * .5 || n > h * 3) return;
+        if (!b.some(o => Math.abs(o.x0 - sg.x0) <= 3 && Math.abs(o.x1 - sg.x1) <= 3 && cdist([o.c[0], o.c[1], o.c[2]], 0, sg.c) < 40)) return;
+        // something printed inside it at mid height
+        const ym = Math.round(top + h * .5); let ink = 0; for (let x = sg.x0 + 2; x < sg.x1 - 1; x++) if (cdist(d, (ym * w + x) * 4, sg.c) > 90) ink++;
+        if (ink < 2) return;
+        cands.push({r: tp.r, x0: sg.x0, x1: sg.x1, cx: (sg.x0 + sg.x1) / 2});
+      });
+    });
+    const groups = [];
+    cands.forEach(c => { const gg = groups.find(gg => Math.abs(gg.cx - c.cx) <= w * .02); if (gg) { if (!gg.items.some(i => i.r === c.r)) gg.items.push(c); } else groups.push({cx: c.cx, items: [c]}); });
+    const best = groups.filter(gg => gg.items.length >= Math.max(2, Math.ceil(g.rows.length * .6))).sort((p, q) => p.cx - q.cx)[0];
+    if (best) {
+      const med = a => { const v = [...a].sort((p, q) => p - q); return v[v.length >> 1]; };
+      const x0 = med(best.items.map(i => i.x0)) / s, x1 = med(best.items.map(i => i.x1)) / s, pad = (x1 - x0) * .08;
+      const ref = t.zones.find(z => z.row > 0 && z.type === 'teamName') || t.zones.find(z => z.row > 0) || {};
+      out = {x: Math.round(x0 + pad), w: Math.round(x1 - x0 - pad * 2), style: {font: ref.font, weight: ref.weight, color: ref.color, ls: 0, sw: 0, sc: '#000000', fit: true, upper: false, valign: 'middle', align: 'center'}};
+    }
+  } catch (e) { out = null; }
+  RANKC.set(key, out); return out;
+}
+/* adds number spots over the printed rank cell of every row, so long graphics and pages count on */
+function withRankSpots(vt, cell, rows){
+  const zones = vt.zones.slice();
+  for (const r of rows) { const zs = vt.zones.filter(z => z.row === r); if (!zs.length) continue; const y = Math.min(...zs.map(z => z.y)), h = Math.max(...zs.map(z => z.y + z.h)) - y;
+    zones.push({...cell.style, id: 'rank-auto-' + r, type: 'text', field: 'Rank', row: r, x: cell.x, y, w: cell.w, h, size: Math.round(h * .5), sample: ''}); }
+  return {...vt, zones};
+}
+async function longTemplate(t, n){
+  const g = rowGeom(t); if (!g) return null;
+  const R = g.rows.length, extra = n - R; if (extra <= 0) return null;
+  const key = [t.id, n, t.image.ref, t.zones.length, JSON.stringify(t.zones).length].join('|');
+  if (LONG.has(key)) return LONG.get(key);
+  const img = await loadImage(t.image.ref); if (!img) return null;
+  const W = t.image.w, H = t.image.h, P = g.pitch, last = g.tops[R - 1], sR = last.top - g.off, cut = Math.min(H, sR + P), add = extra * P;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H + add; const cx = cv.getContext('2d');
+  cx.drawImage(img, 0, 0, W, cut, 0, 0, W, cut);
+  // extra rows copy the last two rows in turn, so striped designs keep their stripes
+  const srcOf = k => g.tops[R >= 2 && k % 2 === 1 ? R - 2 : R - 1];
+  for (let k = 1; k <= extra; k++) { const src = srcOf(k), sy = src.top - g.off; cx.drawImage(img, 0, sy, W, P, 0, sR + k * P, W, P); }
+  if (H > cut) cx.drawImage(img, 0, cut, W, H - cut, 0, cut + add, W, H - cut);
+  const zones = [];
+  for (const z of t.zones) { if (z.row > 0) zones.push(z); else zones.push(z.y >= cut ? {...z, y: z.y + add} : z); }
+  for (let k = 1; k <= extra; k++) { const src = srcOf(k), r = g.rows[R - 1] + k; t.zones.filter(z => z.row === src.r).forEach(z => zones.push({...z, id: z.id + '-x' + k, row: r, y: z.y - (src.top - g.off) + sR + k * P})); }
+  const ref = 'tmp:long-' + uid(); MEM.set(ref, cv);
+  const vt = {...t, zones, image: {ref, w: W, h: H + add}};
+  LONG.set(key, vt); return vt;
+}
+async function graphicsFor(t, data){
+  const d = rankedFill(t, data), tm = tableModel(t), L = t.layout;
+  const used = tm.rows.filter(r => tm.cols.some(c => d.values[c.field + '|' + r] || d.teams[c.field + '|' + r])).length;
+  if (!tm.base || tm.rows.length === tm.base || !L) return [{t, data: d}];
+  const n = Math.max(tm.base, used);
+  const cell = n > tm.base ? await findRankCell(t) : null;
+  if (cell) tm.rows.forEach((r, i) => { if (i < used) d.values['Rank|' + r] = String(i + 1); });
+  if (L.mode === 'long') { let vt = n > tm.base ? await longTemplate(t, n) : null; if (vt && cell) vt = withRankSpots(vt, cell, tm.rows.slice(0, n)); return [{t: vt || t, data: d}]; }
+  const R = tm.base, pages = Math.max(1, Math.ceil(n / R)), out = [];
+  for (let p = 0; p < pages; p++) {
+    const pd = {values: {}, teams: {}, images: {}};
+    for (const [k, v] of Object.entries(d.values)) { const [f, r] = splitKey(k); if (!r) pd.values[k] = v; else if (r > p * R && r <= (p + 1) * R) pd.values[f + '|' + (r - p * R)] = v; }
+    for (const [k, v] of Object.entries(d.teams)) { const [f, r] = splitKey(k); if (!r) pd.teams[k] = v; else if (r > p * R && r <= (p + 1) * R) pd.teams[f + '|' + (r - p * R)] = v; }
+    for (const [k, v] of Object.entries(d.images)) { const [f, r] = splitKey(k); if (!r) pd.images[k] = v; else if (r > p * R && r <= (p + 1) * R) pd.images[f + '|' + (r - p * R)] = v; }
+    out.push({t: cell ? withRankSpots(t, cell, tableModel(t, true).rows) : t, data: pd});
+  }
+  return out;
+}
+const splitKey = k => { const i = k.lastIndexOf('|'); const r = +k.slice(i + 1); return [k.slice(0, i), Number.isFinite(r) ? r : 0]; };
+S.page = 0;
+const previewFill = throttle(async () => {
+  if (!(S.cur && S.view === 'fill')) return null;
+  const gs = await graphicsFor(S.cur, S.fill); if (S.page >= gs.length) S.page = gs.length - 1; if (S.page < 0) S.page = 0;
+  const pg = $('#fill-pages'); if (pg) { pg.classList.toggle('hidden', gs.length < 2); $('#pg-label').textContent = `Page ${S.page + 1} of ${gs.length}`; }
+  $('#dl-btn').textContent = gs.length > 1 ? `Download ${gs.length} PNGs` : 'Download PNG';
+  const g = gs[S.page]; $('#fill-size').textContent = `${g.t.image.w}×${g.t.image.h}px`;
+  return renderTo($('#fill-canvas'), g.t, g.data, {});
+}, 50);
 function openFill(t){
   S.cur = t; S.fill = loadFill(t); S.batch = []; applyCalc(t, S.fill);
   showView('fill');
@@ -1037,6 +1185,7 @@ function renderFillForm(){
           <div class="row"><button class="btn sm primary" data-act="calc-toggle" data-on="1">${t.calc ? 'Update' : 'Turn on'}</button>${t.calc ? '<button class="btn sm ghost" data-act="calc-toggle" data-on="0">Turn off</button>' : ''}</div>
         </div></details>` : ''}
       ${ffCard(t)}
+      ${layoutCard(t)}
 </div></details>`;
   }
   html += '</div>';
@@ -1056,6 +1205,7 @@ function wireFill(){
     const tk = e.target.dataset.team, ik = e.target.dataset.img;
     if (tk != null) { const v = e.target.value; if (!v) delete S.fill.teams[tk]; else if (v !== '__custom') { const t = teamById(v); S.fill.teams[tk] = {id: v, name: t ? t.name : ''}; } onFillChange(); }
     if (e.target.id === 'imp-file') { importFiles(e.target.files); e.target.value = ''; return; }
+    if (e.target.id === 'lay-mode') { const t = S.cur, tm = tableModel(t, true), v = e.target.value; if (v === 'top') { const n = tm.rows.length; t.layout = {mode: 'top', n}; Object.keys(S.fill.values).forEach(k => { if (splitKey(k)[1] > n) delete S.fill.values[k]; }); Object.keys(S.fill.teams).forEach(k => { if (splitKey(k)[1] > n) delete S.fill.teams[k]; }); } else t.layout = {...t.layout, mode: v}; S.page = 0; queueSave(t); renderFillForm(); previewFill(); return; }
     if (e.target.id === 'ff-toggle') { const t = S.cur; const old = (t.scoring && t.scoring.ff === false) ? t.scoring : {}; t.scoring = {...old, ff: e.target.checked}; if (!e.target.checked && !old.pts) { t.scoring.pts = FF_OFFICIAL.pts.slice(); t.scoring.perKill = 1; } queueSave(t); renderFillForm(); toast(e.target.checked ? 'FF official scoring is on.' : 'FF official scoring is off. Set your own points below.'); return; }
     if (e.target.id === 'ff-pts' || e.target.id === 'ff-kill') { const t = S.cur; const pts = $('#ff-pts').value.split(/[,\s;]+/).map(num).filter(v => v != null); t.scoring = {ff: false, preset: 'custom', pts: pts.length ? pts : FF_OFFICIAL.pts.slice(), perKill: num($('#ff-kill').value) ?? 1}; queueSave(t); toast('Your points are saved for this template.'); return; }
     if (e.target.id === 'sc-preset') { const p = PLACEMENT_PRESETS.find(x => x.id === e.target.value); if (p) $('#sc-pts').value = p.pts.join(', '); return; }
@@ -1104,7 +1254,13 @@ function fileBase(t, data){
 }
 async function downloadOne(){
   const t = S.cur, btn = $('#dl-btn'); btn.disabled = true;
-  try { const cv = document.createElement('canvas'); await renderTo(cv, t, rankedFill(t, S.fill), {}); const blob = await canvasBlob(cv); await offerDownload(blob, fileBase(t, S.fill) + '.png'); countMade(1); }
+  try {
+    const gs = await graphicsFor(t, S.fill), base = fileBase(t, S.fill);
+    if (gs.length === 1) { const cv = document.createElement('canvas'); await renderTo(cv, gs[0].t, gs[0].data, {}); const blob = await canvasBlob(cv); await offerDownload(blob, base + '.png'); countMade(1); return; }
+    const files = [];
+    for (let i = 0; i < gs.length; i++) { toast(`Making page ${i + 1} of ${gs.length}…`); const cv = document.createElement('canvas'); await renderTo(cv, gs[i].t, gs[i].data, {}); files.push({name: `${base} - page ${i + 1}.png`, blob: await canvasBlob(cv)}); }
+    await offerMany(files); countMade(files.length);
+  }
   catch (e) { toast('Could not make the image: ' + errMsg(e), true); }
   finally { btn.disabled = false; }
 }
@@ -1559,8 +1715,8 @@ function renderDetectCols(pi){
   const typeOf = i => (f.types && f.types[i]) || (f.cols[i].logo ? 'teamLogo' : i === firstUsed ? 'teamName' : 'text');
   let k = 0; // presets name the columns that are used, in order (logo boxes follow the team column)
   $('#dt-cols').innerHTML = f.cols.map((c, i) => {
-    const use = !c.fixed; const name = c.logo ? 'Logo' : use ? (p[k++] || 'Column ' + (i + 1)) : 'Printed ' + (i + 1);
-    return `<div class="row" style="flex-wrap:nowrap"><label class="check" title="Use this column"><input type="checkbox" id="dt-use-${i}" ${use ? 'checked' : ''} aria-label="Use column ${i + 1}"></label><input id="dt-col-${i}" value="${esc(name)}" aria-label="Column ${i + 1} name"><select id="dt-type-${i}" aria-label="Column ${i + 1} type" style="width:auto">${['teamName','text','teamTag','teamLogo'].map(t2 => `<option value="${t2}" ${typeOf(i) === t2 ? 'selected' : ''}>${t2 === 'text' ? 'Number / text' : TYPE_LABEL[t2]}</option>`).join('')}</select></div>${c.fixed ? '<p class="help" style="margin:-4px 0 4px 30px">This column changes from row to row (like printed rank numbers), so it looks like part of your design. Tick it if it should be editable.</p>' : ''}`;
+    const use = !c.fixed; const name = c.logo ? 'Logo' : use ? (p[k++] || 'Column ' + (i + 1)) : (i < firstUsed ? 'Rank' : 'Printed ' + (i + 1));
+    return `<div class="row" style="flex-wrap:nowrap"><label class="check" title="Use this column"><input type="checkbox" id="dt-use-${i}" ${use ? 'checked' : ''} aria-label="Use column ${i + 1}"></label><input id="dt-col-${i}" value="${esc(name)}" aria-label="Column ${i + 1} name"><select id="dt-type-${i}" aria-label="Column ${i + 1} type" style="width:auto">${['teamName','text','teamTag','teamLogo'].map(t2 => `<option value="${t2}" ${typeOf(i) === t2 ? 'selected' : ''}>${t2 === 'text' ? 'Number / text' : TYPE_LABEL[t2]}</option>`).join('')}</select></div>${c.fixed ? '<p class="help" style="margin:-4px 0 4px 30px">This column changes from row to row (like printed rank numbers), so it looks like part of your design. Tick it to let the app number the rows itself, which you need for overall standings with more teams than rows.</p>' : ''}`;
   }).join('') + ((f.spots || []).length ? `<p class="lab" style="margin-top:6px">Other spots</p>` + f.spots.map((sp, i) => `<div class="row" style="flex-wrap:nowrap"><label class="check"><input type="checkbox" id="dt-suse-${i}" checked aria-label="Use spot ${i + 1}"></label><input id="dt-sname-${i}" value="${esc(sp.name)}" aria-label="Spot ${i + 1} name"><select id="dt-stype-${i}" style="width:auto" aria-label="Spot ${i + 1} type">${['teamName','text','teamTag','teamLogo'].map(t2 => `<option value="${t2}" ${sp.type === t2 ? 'selected' : ''}>${t2 === 'text' ? 'Number / text' : TYPE_LABEL[t2]}</option>`).join('')}</select></div>`).join('') : '');
 }
 async function applyDetect(){
@@ -1600,6 +1756,7 @@ async function applyDetect(){
     spots.forEach(sp => { let f = sp.name; if (isTeamType(sp.type)) f = sp.name; else { seen[f] = (seen[f] || 0) + 1; if (seen[f] > 1) f += ' ' + seen[f]; }
       zones.push({...base, id: uid(), type: sp.type, field: f, row: 0, x: sp.x, y: sp.y, w: sp.w, h: sp.h, size: Math.round(sp.h * .75), align: 'center', upper: sp.type !== 'text', sample: ''}); });
     t.zones = zones;
+    t.printedRank = found.cols.some((c, i) => c.fixed && !use[i] && i < found.cols.findIndex((c2, j) => use[j] && types[j] === 'teamName'));
     const total = usedNames.find(x => roleOf(x) === 'total');
     if (total) { const from = names.filter((x, i) => use[i] && types[i] === 'text' && x !== total && ['kp','pp','kills'].includes(roleOf(x))); t.calc = from.filter(x => roleOf(x) !== 'kills').length ? {target: total, from: from.filter(x => roleOf(x) !== 'kills')} : null; }
     await doSave(t);
@@ -1967,11 +2124,16 @@ function showImport(st, grids){
   box.innerHTML = `<p class="help"><b>${st.teams.length} teams</b> read${st.mode === 'matches' ? ` from <b>${st.nMatches || 'several'} match${st.nMatches === 1 ? '' : 'es'}</b>, added up with your scoring rules` : ''}, sorted by Total. ${ocr ? '<b>Read from a screenshot: check the names and numbers below.</b> You can correct anything in the table afterwards.' : ''} ${st.notes.join(' ')}</p>
     <div class="tablewrap"><table><thead><tr><th>#</th><th>Team</th>${previewCols.map(([h]) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${st.teams.slice(0, 24).map(x => `<tr><td class="n">${x.rank}</td><td>${esc(x.team)}${(() => { const m = matchTeam(x.team); return m && m.id ? (norm(m.name) !== norm(x.team) ? ` <span class="chip lime">→ ${esc(m.name)}</span>` : '') : ' <span class="chip">no logo</span>'; })()}</td>${previewCols.map(([, f]) => `<td>${esc(f(x))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
     ${cols.length ? `<div class="form" style="gap:8px"><span class="lab">Which result goes in each column of your template</span>${cols.map((c, i) => { const g = guess(c, i); return `<div class="row" style="flex-wrap:nowrap"><span style="min-width:90px;font-weight:700">${esc(c.field)}</span><select id="imp-map-${i}" data-field="${esc(c.field)}" aria-label="Source for ${esc(c.field)}">${srcs.map(([v, l]) => `<option value="${esc(v)}" ${v === g ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`; }).join('')}</div>` : ''}
-    <div class="row"><button class="btn primary" data-act="imp-apply">Put these on the graphic</button><span class="muted small">${st.teams.length > tm.rows.length ? `Top ${tm.rows.length} fit this template.` : ''}</span></div>`;
+    <div class="row"><button class="btn primary" data-act="imp-apply">Put these on the graphic</button><span class="muted small">${st.teams.length > tm.base ? `This design has ${tm.base} rows. You'll choose how to fit ${st.teams.length} teams next.` : ''}</span></div>`;
 }
-function applyImport(){
-  const t = S.cur, tm = tableModel(t), st = IM && IM.st; if (!st) return;
-  const map = {}; $$('#imp-result select[data-field]').forEach(s => { map[s.dataset.field] = s.value; });
+function applyImport(decided){
+  const t0 = S.cur, st0 = IM && IM.st; if (!st0) return;
+  const base = tableModel(t0, true).rows.length;
+  if (!decided) { const m = {}; $$('#imp-result select[data-field]').forEach(s => { m[s.dataset.field] = s.value; }); IM.map = m; }
+  if (!decided && base && st0.teams.length > base) { askLayout(t0, st0.teams.length, base); return; }
+  if (!decided && t0.layout && t0.layout.mode !== 'top') t0.layout = {mode: 'top', n: base};
+  const t = S.cur, tm = tableModel(t), st = IM && IM.st;
+  const map = IM.map || {};
   t.importMap = map;
   let calcNote = '';
   if (t.calc && map[t.calc.target] && (st.hasTotal || String(map[t.calc.target]).startsWith('x:'))) { t.calc = null; calcNote = ' Auto total was turned off because the totals came from your results.'; }
@@ -1990,7 +2152,48 @@ function applyImport(){
   });
   if (!teamCol) toast('This template has no team column, so only the numbers were filled.');
   queueSave(t); renderFillForm(); onFillChange();
-  toast(`Filled ${Math.min(st.teams.length, tm.rows.length)} rows. Check the preview, then download.${calcNote}`);
+  let tieNote = '';
+  const R = tm.rows.length, a = st.teams[R - 1], b = st.teams[R];
+  if (a && b && a.total === b.total && a.wins === b.wins && a.kills === b.kills && a.kp === b.kp) tieNote = ` ${a.team} and ${b.team} were level, so ${a.team} took the last spot on tie-breakers.`;
+  else if (a && b && a.total === b.total) tieNote = ` ${a.team} beat ${b.team} to the last spot on tie-breakers.`;
+  const more = st.teams.length > R ? ` Top ${R} of ${st.teams.length} teams shown.` : '';
+  const L = t.layout, pages = L && L.mode === 'pages' ? Math.ceil(R / tm.base) : 1;
+  const how = L && L.mode === 'long' && R > tm.base ? ' All teams are on one long graphic.' : pages > 1 ? ` All teams are on ${pages} pages.` : '';
+  S.page = 0;
+  toast(`Filled ${Math.min(st.teams.length, R)} rows.${how || (tieNote ? more + tieNote : more)} Check the preview, then download.${calcNote}`);
+}
+function askLayout(t, n, base){
+  const prev = (t.layout && t.layout.mode) || 'top';
+  const pages = Math.ceil(n / base);
+  $('#lay-summary').textContent = `Your results have ${n} teams, but this design has ${base} rows.`;
+  $('#lay-opts').innerHTML = `
+    <label class="layopt"><input type="radio" name="lay" value="top" ${prev === 'top' ? 'checked' : ''}><span><b>${base} teams</b><small>Only the top ${base}. If teams are level for the last spot, the tie-breakers decide and only the team ahead goes in.</small></span></label>
+    <label class="layopt"><input type="radio" name="lay" value="all" ${prev !== 'top' ? 'checked' : ''}><span><b>${n > 24 ? '24+' : 'All ' + n} teams</b><small>Fit every team, for overall standings.</small></span></label>
+    <div class="layall ${prev === 'top' ? 'hidden' : ''}" id="lay-all">
+      <label class="check"><input type="radio" name="layk" value="long" ${prev !== 'pages' ? 'checked' : ''}> One long graphic (${n} rows)</label>
+      <label class="check"><input type="radio" name="layk" value="pages" ${prev === 'pages' ? 'checked' : ''}> ${pages} pages of ${base}</label>
+    </div>`;
+  $$('#lay-opts input[name="lay"]').forEach(i => i.addEventListener('change', () => $('#lay-all').classList.toggle('hidden', $('#lay-opts input[name="lay"]:checked').value === 'top')));
+  $('#lay-rank').classList.add('hidden');
+  if (!tableModel(t, true).cols.some(c => roleOf(c.field) === 'rank')) findRankCell(t).then(c => { const tb = tableModel(t, true); const printed = tb.cols.length && t.zones.some(z => z.row === 1) && !c; $('#lay-rank').classList.toggle('hidden', !printed || !needsRankNote(t)); });
+  LAY = {n, base};
+  $('#layout-modal').classList.remove('hidden');
+}
+let LAY = null;
+// the note only matters when the design looks like it has printed rank numbers we could not find
+function needsRankNote(t){ return !!t.printedRank; }
+function layoutChosen(){
+  const t = S.cur; if (!t || !LAY) return;
+  const v = $('#lay-opts input[name="lay"]:checked').value, k = ($('#lay-opts input[name="layk"]:checked') || {}).value || 'long';
+  t.layout = v === 'top' ? {mode: 'top', n: LAY.base} : {mode: k, n: LAY.n};
+  $('#layout-modal').classList.add('hidden');
+  applyImport(true);
+}
+function layoutCard(t){
+  const L = t.layout, tm = tableModel(t); if (!L || L.mode === 'top' || tm.rows.length <= tm.base) return '';
+  const pages = Math.ceil(tm.rows.length / tm.base);
+  return `<div class="ffrow"><div class="ff-lab">All ${tm.rows.length} teams<small>${L.mode === 'long' ? 'One long graphic' : `${pages} pages of ${tm.base}`}</small></div>
+    <select id="lay-mode" style="width:auto" aria-label="Layout"><option value="long" ${L.mode === 'long' ? 'selected' : ''}>Long graphic</option><option value="pages" ${L.mode === 'pages' ? 'selected' : ''}>Pages</option><option value="top">Top ${tm.base} only</option></select></div>`;
 }
 function scoringCard(t){
   const sc = scoringOf(t);
@@ -2216,6 +2419,10 @@ async function act(a, el){
     case 'team-del': { const t = S.teams.find(x => x.id === id); if (!t) break; try { await S.store.del('teams', id); S.teams = S.teams.filter(x => x !== t); if (t.logo) S.store.delBlob(t.logo); if (S.editTeam === t) resetTeamForm(); renderTeams(); toast(`Deleted ${t.name}.`); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
     case 'font-del': { const f = S.fonts.find(x => x.id === id); if (!f) break; try { await S.store.del('fonts', id); S.fonts = S.fonts.filter(x => x !== f); S.store.delBlob(f.ref); renderFonts(); toast('Font deleted. Spots using it fall back to another font.'); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
     case 'ff-help': ffHelp(); break;
+    case 'pg-prev': S.page--; previewFill(); break;
+    case 'pg-next': S.page++; previewFill(); break;
+    case 'lay-go': layoutChosen(); break;
+    case 'lay-cancel': $('#layout-modal').classList.add('hidden'); break;
     case 'modal-close': $('#modal').classList.add('hidden'); $('#modal-body').innerHTML = ''; break;
   }
 }
