@@ -82,6 +82,22 @@ input[type=color]{width:44px;height:42px;padding:2px;border:1px solid var(--line
 input[type=file]{font-size:.85rem;max-width:100%}
 .check{display:flex;align-items:center;gap:8px;font-size:.9rem}
 .check input{width:18px;height:18px;accent-color:var(--accent)}
+.ffrow{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border:1px solid var(--line);background:var(--panel-2)}
+.ffrow .ff-lab{flex:1;min-width:0;font-family:var(--label);font-size:.9rem}
+.ffrow .ff-lab small{display:block;color:var(--muted);font-family:var(--body);font-size:.78rem;margin-top:2px}
+.switch{position:relative;width:44px;height:24px;flex:none}
+.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;z-index:1}
+.switch span{position:absolute;inset:0;border-radius:24px;background:var(--line-2);transition:background .15s}
+.switch span::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:var(--text);transition:transform .15s}
+.switch input:checked+span{background:var(--accent)}
+.switch input:checked+span::after{transform:translateX(20px);background:var(--accent-ink)}
+.switch input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.qbtn{width:28px;height:28px;flex:none;border-radius:50%;border:1px solid var(--line-2);background:transparent;color:var(--text);font-family:var(--label);font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.qbtn:hover{border-color:var(--accent);color:var(--accent)}
+.fftable{width:100%;border-collapse:collapse;margin:6px 0 10px;font-size:.88rem}
+.fftable td{padding:5px 8px;border-bottom:1px solid var(--line)}
+.fftable td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.ffcustom{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:8px;margin-top:8px}
 .seg{display:flex;border:1px solid var(--line)}
 .seg button{flex:1;background:#0a0d12;border:0;padding:8px 6px;font-family:var(--label);font-size:.85rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer;min-height:40px}
 .seg button+button{border-left:1px solid var(--line)}
@@ -648,7 +664,7 @@ async function offerDownload(blob, filename){
   }
   if (/\.zip$/i.test(filename)) { toast('Zip downloads are not available here. Press and hold each graphic below to save it.', true); return; }
   const url = URL.createObjectURL(blob);
-  $('#modal-title').textContent = filename;
+  $('#modal-title').textContent = filename; $('#modal-help').textContent = 'Press and hold the image, then choose Download image.';
   $('#modal-body').innerHTML = `<img src="${url}" alt="${esc(filename)}">`;
   $('#modal').classList.remove('hidden');
 }
@@ -1020,6 +1036,7 @@ function renderFillForm(){
           <div class="row" id="calc-from"><span class="lab">By adding</span>${textCols.map(c => `<label class="check"><input type="checkbox" value="${esc(c.field)}" ${t.calc && t.calc.from.includes(c.field) ? 'checked' : ''}> ${esc(c.field)}</label>`).join('')}</div>
           <div class="row"><button class="btn sm primary" data-act="calc-toggle" data-on="1">${t.calc ? 'Update' : 'Turn on'}</button>${t.calc ? '<button class="btn sm ghost" data-act="calc-toggle" data-on="0">Turn off</button>' : ''}</div>
         </div></details>` : ''}
+      ${ffCard(t)}
 </div></details>`;
   }
   html += '</div>';
@@ -1039,6 +1056,8 @@ function wireFill(){
     const tk = e.target.dataset.team, ik = e.target.dataset.img;
     if (tk != null) { const v = e.target.value; if (!v) delete S.fill.teams[tk]; else if (v !== '__custom') { const t = teamById(v); S.fill.teams[tk] = {id: v, name: t ? t.name : ''}; } onFillChange(); }
     if (e.target.id === 'imp-file') { importFiles(e.target.files); e.target.value = ''; return; }
+    if (e.target.id === 'ff-toggle') { const t = S.cur; const old = (t.scoring && t.scoring.ff === false) ? t.scoring : {}; t.scoring = {...old, ff: e.target.checked}; if (!e.target.checked && !old.pts) { t.scoring.pts = FF_OFFICIAL.pts.slice(); t.scoring.perKill = 1; } queueSave(t); renderFillForm(); toast(e.target.checked ? 'FF official scoring is on.' : 'FF official scoring is off. Set your own points below.'); return; }
+    if (e.target.id === 'ff-pts' || e.target.id === 'ff-kill') { const t = S.cur; const pts = $('#ff-pts').value.split(/[,\s;]+/).map(num).filter(v => v != null); t.scoring = {ff: false, preset: 'custom', pts: pts.length ? pts : FF_OFFICIAL.pts.slice(), perKill: num($('#ff-kill').value) ?? 1}; queueSave(t); toast('Your points are saved for this template.'); return; }
     if (e.target.id === 'sc-preset') { const p = PLACEMENT_PRESETS.find(x => x.id === e.target.value); if (p) $('#sc-pts').value = p.pts.join(', '); return; }
     if (ik != null) { const file = e.target.files[0]; if (!file) return; const im = new Image(); im.src = URL.createObjectURL(file); im.decode().then(() => { const ref = 'tmp:' + uid(); MEM.set(ref, im); S.fill.images[ik] = ref; onFillChange(); }).catch(() => toast('That picture could not be read.', true)); }
   });
@@ -1656,6 +1675,31 @@ const PLACEMENT_PRESETS = [
   {id: 'flat', label: 'Simple: 10 down to 1', pts: [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]},
 ];
 const defaultScoring = () => ({preset: 'ff', pts: PLACEMENT_PRESETS[0].pts.slice(), perKill: 1});
+const FF_OFFICIAL = {preset: 'ff', pts: [12, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0], perKill: 1};
+/* FF official scoring is on unless the user turns it off for this template */
+function scoringOf(t){
+  const sc = (t && t.scoring) || {};
+  if (sc.ff !== false) return {...FF_OFFICIAL, ff: true};
+  return {preset: 'custom', pts: Array.isArray(sc.pts) && sc.pts.length ? sc.pts : FF_OFFICIAL.pts.slice(), perKill: sc.perKill ?? 1, ff: false};
+}
+function ffCard(t){
+  const sc = scoringOf(t);
+  return `<div class="ffrow"><div class="ff-lab">FF official scoring<small>${sc.ff ? 'Placement points 12, 9, 8 … and 1 point per kill' : 'Using your own points'}</small></div>
+    <button type="button" class="qbtn" data-act="ff-help" aria-label="How FF official scoring works">?</button>
+    <label class="switch" title="FF official scoring"><input type="checkbox" id="ff-toggle" ${sc.ff ? 'checked' : ''} aria-label="FF official scoring"><span></span></label></div>
+  ${sc.ff ? '' : `<div class="ffcustom"><div class="field"><label for="ff-pts">Points for 1st, 2nd, 3rd…</label><input id="ff-pts" value="${esc(sc.pts.join(', '))}" inputmode="decimal"></div><div class="field"><label for="ff-kill">Per kill</label><input id="ff-kill" type="number" step="0.5" min="0" value="${sc.perKill}"></div></div>`}`;
+}
+function ffHelp(){
+  const rows = ['1st (Booyah)', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'].map((p, i) => `<tr><td>${p}</td><td>${FF_OFFICIAL.pts[i]}</td></tr>`).join('') + '<tr><td>11th – 12th</td><td>0</td></tr>';
+  $('#modal-title').textContent = 'FF official scoring';
+  $('#modal-help').textContent = 'The standard Free Fire esports points system. When it is on, the app uses it to add up results that list each match (placement and kills).';
+  $('#modal-body').innerHTML = `<p class="lab" style="margin-top:6px">Placement points</p><table class="fftable"><tbody>${rows}</tbody></table>
+    <p class="lab">Kill points</p><p class="help">Each kill is worth 1 point.</p>
+    <p class="lab" style="margin-top:10px">Match score</p><p class="help">Placement points + kill points. For example, 2nd place with 8 kills = 9 + 8 = <b>17 points</b>.</p>
+    <p class="lab" style="margin-top:10px">Ties</p><p class="help">If teams finish on the same total, the higher team is the one with:<br>1. more Booyahs (match wins)<br>2. more kills overall<br>3. more points in the last match played</p>
+    <p class="lab" style="margin-top:10px">Good to know</p><p class="help">If your results already show points or a Total, those are used as they are. Turn this off to set your own placement and kill points.</p>`;
+  $('#modal').classList.remove('hidden');
+}
 const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g, '').replace(/[^0-9.\-]/g, '')); return isFinite(n) ? n : null; };
 let IM = null; // last parsed import
 
@@ -1715,14 +1759,14 @@ function gridsToStats(grids, scoring){
   const by = new Map();
   for (const r of records) {
     const k = norm(r.team); let t = by.get(k);
-    if (!t) { t = {team: r.team, wins: 0, kills: 0, kp: 0, pp: 0, total: 0, matches: 0, extra: {}, _hasKills: false, _hasKp: false}; by.set(k, t); }
+    if (!t) { t = {team: r.team, wins: 0, kills: 0, kp: 0, pp: 0, total: 0, last: 0, matches: 0, extra: {}, _hasKills: false, _hasKp: false}; by.set(k, t); }
     if (perMatch) {
       t.matches += 1;
       const kills = num(r.kills), kp = num(r.kp), pl = num(r.placement), pp = num(r.pp), tot = num(r.total), w = num(r.wins);
       if (kills != null) { t.kills += kills; t._hasKills = true; }
       const kpv = kp != null ? kp : (kills != null ? kills * scoring.perKill : 0); t.kp += kpv;
       const ppv = pp != null ? pp : (pl != null ? ptsFor(pl) : 0); t.pp += ppv;
-      t.total += tot != null && pp == null && pl == null ? tot : kpv + ppv;
+      const mt = tot != null && pp == null && pl == null ? tot : kpv + ppv; t.total += mt; t.last = mt; // points in the latest match, for ties
       if (w != null) t.wins += w; else if (pl === 1) t.wins += 1;
     } else {
       const kills = num(r.kills), kp = num(r.kp), pp = num(r.pp), tot = num(r.total), w = num(r.wins), m = num(r.matches);
@@ -1733,7 +1777,7 @@ function gridsToStats(grids, scoring){
     }
     Object.assign(t.extra, r.extra);
   }
-  const teams = [...by.values()].sort((a, b) => b.total - a.total || b.wins - a.wins || b.kp - a.kp || a.team.localeCompare(b.team));
+  const teams = [...by.values()].sort((a, b) => b.total - a.total || b.wins - a.wins || (b._hasKills || a._hasKills ? b.kills - a.kills : b.kp - a.kp) || b.last - a.last || a.team.localeCompare(b.team));
   teams.forEach((t, i) => { t.rank = i + 1; for (const k of ['wins','kills','kp','pp','total','matches']) t[k] = Math.round(t[k] * 100) / 100; });
   const nMatches = perMatch ? new Set(records.map(r => r.match ?? '')).size : 0;
   return {teams, hasTotal: !perMatch && has('total'), mode: perMatch ? 'matches' : 'standings', nMatches, headers: [...new Set(headersAll)], notes};
@@ -1837,7 +1881,7 @@ async function ocrImages(files){
 
 async function importFiles(files){
   files = [...(files || [])]; if (!files.length) return;
-  const t = S.cur, sc = t.scoring || defaultScoring();
+  const t = S.cur, sc = scoringOf(t);
   const imgs = files.filter(f => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif)$/i.test(f.name));
   const docs = files.filter(f => !imgs.includes(f));
   let grids = [];
@@ -1885,7 +1929,7 @@ ${text ? '\nResults text:\n' + text.slice(0, 60000) : ''}`;
 }
 async function importText(){
   const txt = $('#imp-text').value.trim(); if (!txt) { toast('Paste some results first.'); return; }
-  const t = S.cur, sc = t.scoring || defaultScoring();
+  const t = S.cur, sc = scoringOf(t);
   let grids = [];
   if (/^\s*[\[{]/.test(txt)) { try { grids = jsonToGrids(JSON.parse(txt)); } catch (e) {} }
   if (!grids.length) { const g = parseTable(txt); if (g.length) grids = [{name: 'pasted', grid: g}]; }
@@ -1949,7 +1993,7 @@ function applyImport(){
   toast(`Filled ${Math.min(st.teams.length, tm.rows.length)} rows. Check the preview, then download.${calcNote}`);
 }
 function scoringCard(t){
-  const sc = t.scoring || defaultScoring();
+  const sc = scoringOf(t);
   return `<details><summary class="lab" style="cursor:pointer">Scoring rules for match-by-match results · ${esc((PLACEMENT_PRESETS.find(p => p.id === sc.preset) || {label: 'Custom'}).label)}, ${sc.perKill} per kill</summary>
     <div class="form" style="gap:8px;margin-top:8px">
       <p class="help">Used when your file lists each match (team, placement, kills). Kill points = kills × points per kill. Placement points come from the list below: first number for 1st place, second for 2nd, and so on.</p>
@@ -2171,6 +2215,7 @@ async function act(a, el){
     case 'team-cancel': resetTeamForm(); break;
     case 'team-del': { const t = S.teams.find(x => x.id === id); if (!t) break; try { await S.store.del('teams', id); S.teams = S.teams.filter(x => x !== t); if (t.logo) S.store.delBlob(t.logo); if (S.editTeam === t) resetTeamForm(); renderTeams(); toast(`Deleted ${t.name}.`); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
     case 'font-del': { const f = S.fonts.find(x => x.id === id); if (!f) break; try { await S.store.del('fonts', id); S.fonts = S.fonts.filter(x => x !== f); S.store.delBlob(f.ref); renderFonts(); toast('Font deleted. Spots using it fall back to another font.'); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
+    case 'ff-help': ffHelp(); break;
     case 'modal-close': $('#modal').classList.add('hidden'); $('#modal-body').innerHTML = ''; break;
   }
 }
