@@ -1391,12 +1391,61 @@ function detectCells(img){
   return {W: P.W, H: P.H, rows: rows.map(r => ({top: Math.round(r.top / s), h: Math.round(r.h / s)})), cols: outCols, dashes: marks, color: hex, source, bands: bands.map(b => ({top: b.top / s, h: b.h / s, x0: b.x0 / s, x1: b.x1 / s}))};
 }
 function detectAny(img){
+  const f = detectBase(img);
+  if (f) { try { addLogoColumn(img, f); } catch (e) { /* logo cells are optional */ } }
+  return f;
+}
+function detectBase(img){
   let f = null;
   try { f = detectCells(img); } catch (e) { f = null; }
   if (f && f.source === 'cells' && f.cols.some(c => !c.fixed)) return f;
   let g = null; try { g = detectTable(img); } catch (e) { g = null; }
   if (g) { g.source = 'dashes'; g.cols.forEach(c => { c.fixed = false; c.hasInk = true; c.align = 'center'; }); return g; }
   return f;
+}
+/* team logos usually sit in their own empty square box just left of the team name, in every row */
+function addLogoColumn(img, f){
+  if (!f.rows || f.rows.length < 2) return;
+  const ni = f.cols.findIndex(c => !c.fixed); if (ni < 0) return;
+  const P = pixelsOf(img, 1400), {w, d, s} = P, nameX = Math.round(f.cols[ni].x * s);
+  const med = a => { const b = [...a].sort((p, q) => p - q); return b[b.length >> 1]; };
+  const segsAt = (y, xmax) => {
+    const out = []; let x = 0;
+    while (x < xmax) {
+      const i0 = (y * w + x) * 4, ref = [d[i0], d[i0+1], d[i0+2]]; let xx = x + 1;
+      for (; xx < xmax; xx++) if (cdist(d, (y * w + xx) * 4, ref) >= 26) break;
+      out.push({x0: x, x1: xx - 1, c: ref}); x = xx;
+    }
+    return out;
+  };
+  const cands = [];
+  f.rows.forEach((r0, ri) => {
+    const top = r0.top * s, h = r0.h * s, lines = [.3, .5, .7].map(k => segsAt(Math.round(top + h * k), Math.min(w, nameX + 2)));
+    lines[1].forEach(sg => {
+      const n = sg.x1 - sg.x0 + 1;
+      if (n < h * .55 || n > h * 1.6 || sg.x1 >= nameX) return;
+      const same = l => l.some(o => Math.abs(o.x0 - sg.x0) <= 3 && Math.abs(o.x1 - sg.x1) <= 3 && cdist([o.c[0], o.c[1], o.c[2]], 0, sg.c) < 40);
+      if (!same(lines[0]) || !same(lines[2])) return;
+      // vertical extent of the box at its centre
+      const cx = Math.round((sg.x0 + sg.x1) / 2); let y0 = Math.round(top + h * .5), y1 = y0;
+      while (y0 > top - h * .3 && cdist(d, ((y0 - 1) * w + cx) * 4, sg.c) < 26) y0--;
+      while (y1 < top + h * 1.3 && cdist(d, ((y1 + 1) * w + cx) * 4, sg.c) < 26) y1++;
+      const bh = y1 - y0 + 1;
+      if (bh < h * .5 || bh > h * 1.25 || n / bh < .6 || n / bh > 1.7) return;
+      cands.push({ri, x0: sg.x0, x1: sg.x1, cx: (sg.x0 + sg.x1) / 2, dy: y0 - top, bh});
+    });
+  });
+  const tol = w * .02, groups = [];
+  cands.sort((a, b) => a.cx - b.cx).forEach(c => { const g = groups.find(g => Math.abs(g.cx - c.cx) <= tol); if (g) { if (!g.items.some(i => i.ri === c.ri)) g.items.push(c); } else groups.push({cx: c.cx, items: [c]}); });
+  const need = Math.max(2, Math.ceil(f.rows.length * .6));
+  const g = groups.filter(g => g.items.length >= need).sort((a, b) => b.cx - a.cx)[0]; // the box nearest the name
+  if (!g) return;
+  const x0 = med(g.items.map(i => i.x0)), x1 = med(g.items.map(i => i.x1)), dy = med(g.items.map(i => i.dy)), bh = med(g.items.map(i => i.bh));
+  const pad = Math.round((x1 - x0) * .1), padY = Math.round(bh * .1);
+  const col = {x: Math.round((x0 + pad) / s), w: Math.round((x1 - x0 + 1 - pad * 2) / s), dy: Math.round((dy + padY) / s), h: Math.round((bh - padY * 2) / s), align: 'center', fixed: false, hasInk: false, logo: true};
+  // a column already detected over the same box (rare) is replaced
+  f.cols = f.cols.filter(c => c.x + c.w <= col.x || c.x >= col.x + col.w);
+  f.cols.push(col); f.cols.sort((a, b) => a.x - b.x);
 }
 /* Claude looks at the design when nothing regular is found */
 async function detectWithClaude(t, img){
@@ -1410,7 +1459,7 @@ Do NOT include fixed design text: titles, column headers, sponsor names, social 
 Reply with ONLY JSON:
 {"table": {"rows": [{"y": 0.0, "h": 0.0}], "columns": [{"name": "Team", "type": "teamName", "x": 0.0, "w": 0.0}]} or null,
  "spots": [{"name": "Stage", "type": "text", "x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0}]}
-All numbers are fractions of the image width (x, w) or height (y, h), from the top-left corner. Use "table" for repeated rows (standings), with one entry per row and one per column, naming columns from their headers (for example Team, Booyah, Kills, PP, Total). Use "spots" for single spots outside a table (head-to-head names, scores, logos). type is one of teamName, teamLogo, text.`;
+All numbers are fractions of the image width (x, w) or height (y, h), from the top-left corner. Use "table" for repeated rows (standings), with one entry per row and one per column, naming columns from their headers (for example Team, Booyah, Kills, PP, Total). Use "spots" for single spots outside a table (head-to-head names, scores, logos). type is one of teamName, teamLogo, text. Team logos usually sit in their own square box (or square space) just left of the team name in each row; mark that as a teamLogo column.`;
   const v = await S.sample.json(prompt, {images: [blob]});
   if (!v || typeof v !== 'object') throw new Error('no layout came back');
   const W = P.W, H = P.H, out = {W, H, rows: [], cols: [], dashes: [], color: '#ffffff', source: 'claude', names: [], types: [], spots: []};
@@ -1487,11 +1536,11 @@ function openDetect(t, img, found, file){
 }
 function renderDetectCols(pi){
   const f = DT.found, p = DT.presets[pi] ? DT.presets[pi].cols : [];
-  const firstUsed = f.cols.findIndex(c => !c.fixed);
-  const typeOf = i => (f.types && f.types[i]) || (i === firstUsed ? 'teamName' : 'text');
-  let k = 0; // presets name the columns that are used, in order
+  const firstUsed = f.cols.findIndex(c => !c.fixed && !c.logo);
+  const typeOf = i => (f.types && f.types[i]) || (f.cols[i].logo ? 'teamLogo' : i === firstUsed ? 'teamName' : 'text');
+  let k = 0; // presets name the columns that are used, in order (logo boxes follow the team column)
   $('#dt-cols').innerHTML = f.cols.map((c, i) => {
-    const use = !c.fixed; const name = use ? (p[k++] || 'Column ' + (i + 1)) : 'Printed ' + (i + 1);
+    const use = !c.fixed; const name = c.logo ? 'Logo' : use ? (p[k++] || 'Column ' + (i + 1)) : 'Printed ' + (i + 1);
     return `<div class="row" style="flex-wrap:nowrap"><label class="check" title="Use this column"><input type="checkbox" id="dt-use-${i}" ${use ? 'checked' : ''} aria-label="Use column ${i + 1}"></label><input id="dt-col-${i}" value="${esc(name)}" aria-label="Column ${i + 1} name"><select id="dt-type-${i}" aria-label="Column ${i + 1} type" style="width:auto">${['teamName','text','teamTag','teamLogo'].map(t2 => `<option value="${t2}" ${typeOf(i) === t2 ? 'selected' : ''}>${t2 === 'text' ? 'Number / text' : TYPE_LABEL[t2]}</option>`).join('')}</select></div>${c.fixed ? '<p class="help" style="margin:-4px 0 4px 30px">This column changes from row to row (like printed rank numbers), so it looks like part of your design. Tick it if it should be editable.</p>' : ''}`;
   }).join('') + ((f.spots || []).length ? `<p class="lab" style="margin-top:6px">Other spots</p>` + f.spots.map((sp, i) => `<div class="row" style="flex-wrap:nowrap"><label class="check"><input type="checkbox" id="dt-suse-${i}" checked aria-label="Use spot ${i + 1}"></label><input id="dt-sname-${i}" value="${esc(sp.name)}" aria-label="Spot ${i + 1} name"><select id="dt-stype-${i}" style="width:auto" aria-label="Spot ${i + 1} type">${['teamName','text','teamTag','teamLogo'].map(t2 => `<option value="${t2}" ${sp.type === t2 ? 'selected' : ''}>${t2 === 'text' ? 'Number / text' : TYPE_LABEL[t2]}</option>`).join('')}</select></div>`).join('') : '');
 }
@@ -1500,10 +1549,14 @@ async function applyDetect(){
   const use = Array.from({length: n}, (_, i) => $('#dt-use-' + i).checked);
   const names = Array.from({length: n}, (_, i) => ($('#dt-col-' + i).value || '').trim() || 'Column ' + (i + 1));
   const types = Array.from({length: n}, (_, i) => $('#dt-type-' + i).value);
+  // logo and tag columns follow the team name column, so one team fills the name and its logo
+  const nameCol = types.findIndex((ty, i) => use[i] && ty === 'teamName');
+  if (nameCol >= 0) types.forEach((ty, i) => { if (use[i] && (ty === 'teamLogo' || ty === 'teamTag') && types.filter((t2, j) => use[j] && t2 === 'teamName').length === 1) names[i] = names[nameCol]; });
   const spots = (found.spots || []).map((sp, i) => ({...sp, use: $('#dt-suse-' + i).checked, name: ($('#dt-sname-' + i).value || '').trim() || sp.name, type: $('#dt-stype-' + i).value})).filter(sp => sp.use);
   const usedNames = names.filter((_, i) => use[i]);
   if (!usedNames.length && !spots.length) { toast('Tick at least one column or spot.', true); return; }
-  if (new Set(usedNames.map(norm)).size !== usedNames.length) { toast('Give each column a different name.', true); return; }
+  const keyed = names.map((nm, i) => use[i] ? nm + '|' + types[i] : null).filter(Boolean);
+  if (new Set(keyed.map(norm)).size !== keyed.length) { toast('Give each column a different name.', true); return; }
   const font = $('#dt-font').value, weight = +$('#dt-weight').value, color = /^#[0-9a-f]{6}$/i.test($('#dt-colorhex').value) ? $('#dt-colorhex').value : $('#dt-color').value, pct = clamp(+$('#dt-size').value || 48, 20, 95) / 100;
   const nm = ($('#dt-name').value || '').trim(); if (nm) { t.name = nm; $('#ed-name').value = nm; }
   const btn = $('[data-act="detect-apply"]'); btn.disabled = true;
@@ -1522,7 +1575,7 @@ async function applyDetect(){
     const zones = [];
     found.rows.forEach((r, ri) => found.cols.forEach((c, ci) => {
       if (!use[ci]) return;
-      zones.push({...base, id: uid(), type: types[ci], field: names[ci], row: ri + 1, x: c.x, y: r.top, w: c.w, h: r.h, size: Math.round(r.h * pct), align: isTeamType(types[ci]) ? 'left' : (c.align || 'center'), upper: types[ci] !== 'text', sample: types[ci] === 'text' ? String((ri * 7 + ci * 3) % 40 + 1) : ''});
+      zones.push({...base, id: uid(), type: types[ci], field: names[ci], row: ri + 1, x: c.x, y: c.dy != null ? r.top + c.dy : r.top, w: c.w, h: c.h || r.h, size: Math.round(r.h * pct), align: isTeamType(types[ci]) ? 'left' : (c.align || 'center'), upper: types[ci] !== 'text', sample: types[ci] === 'text' ? String((ri * 7 + ci * 3) % 40 + 1) : ''});
     }));
     const seen = {};
     spots.forEach(sp => { let f = sp.name; if (isTeamType(sp.type)) f = sp.name; else { seen[f] = (seen[f] || 0) + 1; if (seen[f] > 1) f += ' ' + seen[f]; }
