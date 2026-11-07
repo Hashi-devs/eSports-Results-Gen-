@@ -45,8 +45,7 @@ a{color:var(--accent)}
 .top{position:sticky;top:0;z-index:20;background:rgba(7,9,13,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .top-in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:10px;margin-right:auto}
-.mark{width:30px;height:30px;border:2px solid var(--accent);display:grid;place-items:center;clip-path:polygon(0 0,100% 0,100% 70%,70% 100%,0 100%)}
-.mark span{width:10px;height:10px;background:var(--accent)}
+.mark{width:32px;height:32px;color:var(--accent);flex:none}
 .brand h1{font-size:1.55rem;letter-spacing:.03em}
 .brand h1 b{color:var(--accent);font-weight:800}
 .badge{font-family:var(--display);font-weight:700;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
@@ -177,6 +176,14 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
 /* toast & modal */
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--panel-2);border:1px solid var(--line-2);border-left:3px solid var(--accent);padding:10px 16px;font-size:.9rem;z-index:70;max-width:min(92vw,520px);box-shadow:0 10px 30px rgba(0,0,0,.6)}
 #toast.bad{border-left-color:var(--bad)}
+.acc{background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--accent)}
+.acc-item+.acc-item{border-top:1px solid var(--line)}
+.acc-item>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 16px;font-family:var(--display);font-weight:800;font-size:1.25rem;letter-spacing:.03em;text-transform:uppercase;min-height:52px}
+.acc-item>summary::-webkit-details-marker{display:none}
+.acc-item>summary::after{content:"";width:9px;height:9px;border-right:2px solid var(--accent);border-bottom:2px solid var(--accent);transform:rotate(45deg);margin-top:-4px;transition:transform .15s}
+.acc-item[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
+.acc-item>summary .sum-note{margin-left:auto;margin-right:10px;font-family:var(--body);font-weight:500;font-size:.8rem;letter-spacing:0;text-transform:none;color:var(--muted)}
+.acc-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal .card{max-width:640px;width:100%;max-height:92vh;overflow:auto}
 .modal .card::before{content:"";position:absolute;left:-1px;right:-1px;top:-1px;height:2px;background:var(--accent)}
@@ -201,10 +208,9 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
 </style>
 </head>
 <body>
-<div class="ticker" aria-hidden="true"><div class="ticker-in"><span><span class="dot"></span>Match day ready</span><span>Results graphics in seconds</span><span>Any game · Any design</span></div></div>
 <header class="top">
   <div class="top-in">
-    <div class="brand"><div class="mark" aria-hidden="true"><span></span></div><h1>Match Day <b>Studio</b></h1><span id="store-badge" class="badge">Loading…</span></div>
+    <div class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 3h26v18" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="square"/><path d="M29 25v4H3V3" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="square"/><path d="M8 8.5h10" stroke="currentColor" stroke-width="1.4" opacity=".7"/><path d="M9 23V12l3.5 4.2L16 10l3.5 6.2L23 12v11z" fill="currentColor"/></svg><h1>Match Day <b>Studio</b></h1><span id="store-badge" class="badge">Loading…</span></div>
     <nav class="tabs" aria-label="Sections">
       <a href="#templates" data-tab="templates" class="on">Templates</a>
       <a href="#teams" data-tab="teams">Teams</a>
@@ -566,7 +572,7 @@ function drawText(ctx, z, text, sizeIn){
   setTextFont(ctx, z, size);
   const m = ctx.measureText(t), cap = ctx.measureText('H').actualBoundingBoxAscent || size * .7;
   const k = z.fit !== false && m.width > z.w ? Math.max(.5, z.w / m.width) : 1; // squeeze only what is needed
-  const al = z.align || 'center';
+  const al = (z.type === 'teamName' || z.type === 'teamTag') ? 'left' : (z.align || 'center');
   ctx.textAlign = al; ctx.textBaseline = 'alphabetic';
   const x = al === 'left' ? z.x : al === 'right' ? z.x + z.w : z.x + z.w / 2;
   const va = z.valign || 'middle';
@@ -793,7 +799,7 @@ function renderPanel(){
       <div class="field"><label for="z-size">Size (px)</label><input id="z-size" type="number" min="4" data-k="size" value="${z.size}"></div>
       <div class="field"><label for="z-color">Colour</label><div class="row" style="flex-wrap:nowrap"><input type="color" id="z-color" data-k="color" value="${esc(z.color)}" aria-label="Colour picker"><input id="z-colorhex" data-k="color" value="${esc(z.color)}" aria-label="Colour code"></div></div>
     </div>
-    <div class="field"><span class="lab">Align</span><div class="seg">${['left','center','right'].map(a => `<button data-set="align:${a}" class="${z.align === a ? 'on' : ''}">${a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</div></div>
+    ${isTeamType(z.type) ? '<p class="help">Team names are always left aligned.</p>' : `<div class="field"><span class="lab">Align</span><div class="seg">${['left','center','right'].map(a => `<button data-set="align:${a}" class="${z.align === a ? 'on' : ''}">${a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</div></div>`}
     <div class="field"><span class="lab">Vertical</span><div class="seg">${['top','middle','bottom'].map(a => `<button data-set="valign:${a}" class="${z.valign === a ? 'on' : ''}">${a[0].toUpperCase() + a.slice(1)}</button>`).join('')}</div></div>
     <div class="row"><label class="check"><input type="checkbox" data-k="fit" ${z.fit !== false ? 'checked' : ''}> Shrink long text to fit</label><label class="check"><input type="checkbox" data-k="upper" ${z.upper ? 'checked' : ''}> CAPITALS</label></div>
     <div class="grid2">
@@ -977,11 +983,13 @@ function renderFillForm(){
   let html = '';
   if (!t.zones.length) html += `<div class="empty">No spots marked on this template yet.<br><br><button class="btn primary" data-act="to-edit">Mark spots</button></div>`;
   if (gen.length) html += `<section class="card"><h3>Details</h3><div class="gridf">${gen.map(fieldInput).join('')}</div>${S.teams.length ? '' : '<p class="help">No teams saved yet. Add them in the Teams tab to pick them here with their logos. Imported or pasted names still work without logos.</p>'}</section>`;
+  const accOpen = k => S.acc[k] ? 'open' : '';
+  html += '<div class="acc">';
   if (tm.rows.length) html += importCard(t);
-  if (t.zones.some(z => TEXT_TYPES.includes(z.type))) html += `<details class="card"><summary>Text style</summary><p class="help">Font, size, colour and more for a whole column or for all the text at once.</p><div id="style-fill"></div></details>`;
+  if (t.zones.some(z => TEXT_TYPES.includes(z.type))) html += `<details class="acc-item" data-acc="style" ${accOpen('style')}><summary>Text style</summary><div class="acc-body"><p class="help">Font, size and colour for a whole column, or for all the text at once.</p><div id="style-fill"></div></div></details>`;
   if (tm.rows.length) {
     const textCols = tm.cols.filter(c => c.kind === 'text');
-    html += `<section class="card"><h3>Table</h3>
+    html += `<details class="acc-item" data-acc="table" ${accOpen('table')}><summary>Table<span class="sum-note">${tm.rows.length} rows</span></summary><div class="acc-body">
 
       <div class="tablewrap"><table><thead><tr><th>#</th>${tm.cols.map(c => `<th>${esc(c.field)}</th>`).join('')}</tr></thead><tbody>
       ${tm.rows.map(r => `<tr><td class="n">${r}</td>${tm.cols.map(c => { const k = c.field + '|' + r; if (!tm.has.has(k)) return '<td class="muted">–</td>';
@@ -998,9 +1006,11 @@ function renderFillForm(){
           <div class="row" id="calc-from"><span class="lab">By adding</span>${textCols.map(c => `<label class="check"><input type="checkbox" value="${esc(c.field)}" ${t.calc && t.calc.from.includes(c.field) ? 'checked' : ''}> ${esc(c.field)}</label>`).join('')}</div>
           <div class="row"><button class="btn sm primary" data-act="calc-toggle" data-on="1">${t.calc ? 'Update' : 'Turn on'}</button>${t.calc ? '<button class="btn sm ghost" data-act="calc-toggle" data-on="0">Turn off</button>' : ''}</div>
         </div></details>` : ''}
-</section>`;
+</div></details>`;
   }
+  html += '</div>';
   $('#fill-form').innerHTML = html;
+  $$('#fill-form .acc-item').forEach(d => d.addEventListener('toggle', () => { S.acc[d.dataset.acc] = d.open; }));
   renderStyleCards();
 }
 function onFillChange(){
@@ -1498,7 +1508,7 @@ async function applyDetect(){
     const zones = [];
     found.rows.forEach((r, ri) => found.cols.forEach((c, ci) => {
       if (!use[ci]) return;
-      zones.push({...base, id: uid(), type: types[ci], field: names[ci], row: ri + 1, x: c.x, y: r.top, w: c.w, h: r.h, size: Math.round(r.h * pct), align: c.align || 'center', upper: types[ci] !== 'text', sample: types[ci] === 'text' ? String((ri * 7 + ci * 3) % 40 + 1) : ''});
+      zones.push({...base, id: uid(), type: types[ci], field: names[ci], row: ri + 1, x: c.x, y: r.top, w: c.w, h: r.h, size: Math.round(r.h * pct), align: isTeamType(types[ci]) ? 'left' : (c.align || 'center'), upper: types[ci] !== 'text', sample: types[ci] === 'text' ? String((ri * 7 + ci * 3) % 40 + 1) : ''});
     }));
     const seen = {};
     spots.forEach(sp => { let f = sp.name; if (isTeamType(sp.type)) f = sp.name; else { seen[f] = (seen[f] || 0) + 1; if (seen[f] > 1) f += ' ' + seen[f]; }
@@ -1895,20 +1905,19 @@ function saveScoring(){
 }
 function importCard(t){
   const canAI = !!S.sample;
-  return `<section class="card hot" id="imp-card"><h3>Import results</h3>
-    <p class="help">Drop in the results and the table fills itself. Screenshots of result screens or standings, spreadsheets (Excel, Google Sheets download, CSV), JSON or pasted text. Works with final standings or match-by-match results from any game.</p>
-    <div class="row"><label class="btn primary file-btn" for="imp-file"><input type="file" id="imp-file" multiple accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.ods,.json,image/png,image/jpeg,image/webp">Choose files</label><span class="muted small" id="imp-msg"></span></div>
+  return `<details class="acc-item" id="imp-card" data-acc="import" ${S.acc.import ? 'open' : ''}><summary>Import results</summary><div class="acc-body">
+    <p class="help">Add a screenshot of the results, a spreadsheet (Excel, CSV) or paste the results, and the table fills itself.</p>
+    <div class="row"><label class="btn primary file-btn" for="imp-file"><input type="file" id="imp-file" multiple accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.ods,.json,image/png,image/jpeg,image/webp">Choose screenshot or file</label><span class="muted small" id="imp-msg"></span></div>
     <details><summary class="btn sm" style="cursor:pointer;list-style:none;display:inline-flex">Paste results</summary>
-      <textarea id="imp-text" placeholder="Team, Booyah, Kills, PP, Total&#10;Lagos Lions, 2, 45, 60, 105&#10;…&#10;&#10;or match by match:&#10;Match, Team, Placement, Kills&#10;1, Lagos Lions, 1, 12"></textarea>
-      <div class="row" style="margin-top:8px"><button class="btn sm" data-act="imp-text">Read pasted results</button>${canAI ? '<span class="muted small">Messy text (like a WhatsApp message) is read by Claude.</span>' : ''}</div>
+      <textarea id="imp-text" placeholder="Team, Booyah, KP, PP&#10;Lagos Lions, 2, 48, 41&#10;Eko Phantoms, 1, 52, 33"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn sm" data-act="imp-text">Read pasted results</button>${canAI ? '<span class="muted small">Messy text (like a WhatsApp message) works too.</span>' : ''}</div>
     </details>
-    ${scoringCard(t)}
-    <div id="imp-result"></div></section>`;
+    <div id="imp-result"></div></div></details>`;
 }
-
 
 /* ---------- text style for many spots at once ---------- */
 S.styleScope = '*';
+S.acc = {import: true, style: false, table: true};
 const TEXT_TYPES = ['text', 'teamName', 'teamTag'];
 function styleScopes(t){
   const fields = [...new Set(t.zones.filter(z => TEXT_TYPES.includes(z.type)).map(z => z.field))];
