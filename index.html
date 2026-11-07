@@ -1858,9 +1858,10 @@ function showImport(st, grids){
   const generic = heads.length && heads.every(h => /^column \d+$|^total$/i.test(h));
   const numHeads = heads.filter(h => !/^total$/i.test(h));
   const guess = (c, i) => {
-    if (saved[c.field] != null && srcs.some(s2 => s2[0] === saved[c.field])) return saved[c.field];
+    if (saved[c.field] && srcs.some(s2 => s2[0] === saved[c.field])) return saved[c.field]; // remember real choices, never "leave empty"
     const r = roleOf(c.field);
     if (r === 'total' && heads.some(h => /^total$/i.test(h))) return 'x:total';
+    if (generic && heads.length === cols.length) { const k = cols.indexOf(c); return heads[k] ? 'x:' + norm(heads[k]) : ''; } // one number per template column, in order (Total included)
     if (generic) { const nonTotal = cols.filter(cc => roleOf(cc.field) !== 'total'); const k = nonTotal.indexOf(c); return k >= 0 && numHeads[numHeads.length - nonTotal.length + k] ? 'x:' + norm(numHeads[numHeads.length - nonTotal.length + k]) : ''; }
     const g = guessSource(c.field);
     return srcs.some(s2 => s2[0] === g) ? g : (r && st.teams.some(x => x[r]) ? r : '');
@@ -1876,7 +1877,7 @@ function applyImport(){
   const map = {}; $$('#imp-result select[data-field]').forEach(s => { map[s.dataset.field] = s.value; });
   t.importMap = map;
   let calcNote = '';
-  if (t.calc && map[t.calc.target] && st.hasTotal) { t.calc = null; calcNote = ' Auto total was turned off because the totals came from your results.'; }
+  if (t.calc && map[t.calc.target] && (st.hasTotal || String(map[t.calc.target]).startsWith('x:'))) { t.calc = null; calcNote = ' Auto total was turned off because the totals came from your results.'; }
   const teamCol = tm.cols.find(c => c.kind === 'team');
   tm.rows.forEach((r, i) => {
     const x = st.teams[i];
