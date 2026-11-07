@@ -1830,6 +1830,7 @@ async function importText(){
     try { grids = await readWithClaude(null, txt); st = gridsToStats(grids, sc); } catch (e) { if (!st.teams.length) { setImportMsg(''); toast(errMsg(e), true); return; } }
   }
   showImport(st, grids);
+  if (st.teams.length && $('[data-act="imp-apply"]')) { applyImport(); $('#imp-result').innerHTML = ''; }
 }
 function setImportMsg(m){ const el = $('#imp-msg'); if (el) el.textContent = m; }
 function showImport(st, grids){
@@ -1908,12 +1909,11 @@ function saveScoring(){
 function importCard(t){
   const canAI = !!S.sample;
   return `<details class="acc-item" id="imp-card" data-acc="import" ${S.acc.import ? 'open' : ''}><summary>Import results</summary><div class="acc-body">
-    <p class="help">Add a screenshot of the results, a spreadsheet (Excel, CSV) or paste the results, and the table fills itself.</p>
+    <p class="help">Add a screenshot or spreadsheet of the results, or type them below, and the table fills itself.</p>
     <div class="row"><label class="btn primary file-btn" for="imp-file"><input type="file" id="imp-file" multiple accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.ods,.json,image/png,image/jpeg,image/webp">Choose screenshot or file</label><span class="muted small" id="imp-msg"></span></div>
-    <details><summary class="btn sm" style="cursor:pointer;list-style:none;display:inline-flex">Paste results</summary>
-      <textarea id="imp-text" placeholder="Team, Booyah, KP, PP&#10;Lagos Lions, 2, 48, 41&#10;Eko Phantoms, 1, 52, 33"></textarea>
-      <div class="row" style="margin-top:8px"><button class="btn sm" data-act="imp-text">Read pasted results</button>${canAI ? '<span class="muted small">Messy text (like a WhatsApp message) works too.</span>' : ''}</div>
-    </details>
+    <div class="field"><label for="imp-text">Or type the results</label>
+      <textarea id="imp-text" rows="6" placeholder="${esc(tableModel(t).cols.filter(c => c.kind !== 'image').map(c => c.field).join(', '))}&#10;One team per line, for example:&#10;Lagos Lions, 2, 48, 41"></textarea></div>
+    <div class="row"><button class="btn primary sm" data-act="imp-text">Fill the table</button><span class="muted small">Commas between columns. Rows copied from a spreadsheet work too${S.sample ? ', and so does messy text like a WhatsApp message' : ''}.</span></div>
     <div id="imp-result"></div></div></details>`;
 }
 
