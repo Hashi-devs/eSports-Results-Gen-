@@ -1040,7 +1040,7 @@ function rowGeom(t){
   const span = Math.max(...tops.map(x => x.bot - x.top)), off = Math.max(0, Math.floor((pitch - span) / 2));
   return {rows: tm.rows, tops, pitch, off};
 }
-const LONG = new Map(), RANKC = new Map();
+const RANKC = new Map();
 /* a cell left of the team names with a number printed in it, in every row (like the # column) */
 async function findRankCell(t){
   const tm = tableModel(t, true);
@@ -1088,26 +1088,6 @@ function withRankSpots(vt, cell, rows){
     zones.push({...cell.style, id: 'rank-auto-' + r, type: 'text', field: 'Rank', row: r, x: cell.x, y, w: cell.w, h, size: Math.round(h * .5), sample: ''}); }
   return {...vt, zones};
 }
-async function longTemplate(t, n){
-  const g = rowGeom(t); if (!g) return null;
-  const R = g.rows.length, extra = n - R; if (extra <= 0) return null;
-  const key = [t.id, n, t.image.ref, t.zones.length, JSON.stringify(t.zones).length].join('|');
-  if (LONG.has(key)) return LONG.get(key);
-  const img = await loadImage(t.image.ref); if (!img) return null;
-  const W = t.image.w, H = t.image.h, P = g.pitch, last = g.tops[R - 1], sR = last.top - g.off, cut = Math.min(H, sR + P), add = extra * P;
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H + add; const cx = cv.getContext('2d');
-  cx.drawImage(img, 0, 0, W, cut, 0, 0, W, cut);
-  // extra rows copy the last two rows in turn, so striped designs keep their stripes
-  const srcOf = k => g.tops[R >= 2 && k % 2 === 1 ? R - 2 : R - 1];
-  for (let k = 1; k <= extra; k++) { const src = srcOf(k), sy = src.top - g.off; cx.drawImage(img, 0, sy, W, P, 0, sR + k * P, W, P); }
-  if (H > cut) cx.drawImage(img, 0, cut, W, H - cut, 0, cut + add, W, H - cut);
-  const zones = [];
-  for (const z of t.zones) { if (z.row > 0) zones.push(z); else zones.push(z.y >= cut ? {...z, y: z.y + add} : z); }
-  for (let k = 1; k <= extra; k++) { const src = srcOf(k), r = g.rows[R - 1] + k; t.zones.filter(z => z.row === src.r).forEach(z => zones.push({...z, id: z.id + '-x' + k, row: r, y: z.y - (src.top - g.off) + sR + k * P})); }
-  const ref = 'tmp:long-' + uid(); MEM.set(ref, cv);
-  const vt = {...t, zones, image: {ref, w: W, h: H + add}};
-  LONG.set(key, vt); return vt;
-}
 async function graphicsFor(t, data){
   const d = rankedFill(t, data), tm = tableModel(t), L = t.layout;
   const used = tm.rows.filter(r => tm.cols.some(c => d.values[c.field + '|' + r] || d.teams[c.field + '|' + r])).length;
@@ -1115,7 +1095,6 @@ async function graphicsFor(t, data){
   const n = Math.max(tm.base, used);
   const cell = n > tm.base ? await findRankCell(t) : null;
   if (cell) tm.rows.forEach((r, i) => { if (i < used) d.values['Rank|' + r] = String(i + 1); });
-  if (L.mode === 'long') { let vt = n > tm.base ? await longTemplate(t, n) : null; if (vt && cell) vt = withRankSpots(vt, cell, tm.rows.slice(0, n)); return [{t: vt || t, data: d}]; }
   const R = tm.base, pages = Math.max(1, Math.ceil(n / R)), out = [];
   for (let p = 0; p < pages; p++) {
     const pd = {values: {}, teams: {}, images: {}};
@@ -1566,9 +1545,49 @@ function detectCells(img){
   return {W: P.W, H: P.H, rows: rows.map(r => ({top: Math.round(r.top / s), h: Math.round(r.h / s)})), cols: outCols, dashes: marks, color: hex, source, bands: bands.map(b => ({top: b.top / s, h: b.h / s, x0: b.x0 / s, x1: b.x1 / s}))};
 }
 function detectAny(img){
-  const f = detectBase(img);
-  if (f) { try { addLogoColumn(img, f); } catch (e) { /* logo cells are optional */ } }
+  let f = null;
+  try { f = detectCells(img); } catch (e) { f = null; }
+  // a second copy of the same rows beside the first: two tables side by side (rows 1–12 left, 13–24 right)
+  if (!(f && f.source === 'cells' && f.cols.some(c => !c.fixed))) f = detectBase(img);
+  if (f) { try { splitSides(f); } catch (e) {} if (!f.side2) { try { findTwin(img, f); } catch (e) {} } try { addLogoColumn(img, f); } catch (e) { /* logo cells are optional */ } }
   return f;
+}
+/* rows found on one side only: look for the same row pattern repeated further across (a second table) */
+function findTwin(img, f){
+  if (f.side2 || f.rows.length < 3) return;
+  const P = pixelsOf(img, 700), {w, d, s} = P;
+  const xs = f.cols.flatMap(c => [c.x, c.x + c.w]);
+  let x0 = Math.round(Math.min(...xs) * s), x1 = Math.round(Math.max(...xs) * s);
+  const pad = Math.round((x1 - x0) * .08); x0 = Math.max(0, x0 - pad); x1 = Math.min(w - 1, x1 + pad);
+  const span = x1 - x0; if (span < 20) return;
+  const pts = [];
+  f.rows.forEach(r => { for (const fy of [.2, .5, .8]) { const y = Math.round((r.top + r.h * fy) * s); for (let x = Math.max(2, x0); x <= x1; x++) { const i = (y * w + x) * 4; if (cdist(d, i, [d[i-8], d[i-7], d[i-6]]) > 60) pts.push([x, y]); } } });
+  if (pts.length < 20) return; // only edges count, so flat areas can't line up at the wrong offset
+  // a gap between rows (row background vs page) so we compare structure, not just colour
+  let best = null;
+  for (let dx = -x0; dx <= w - 1 - x1; dx += 1) {
+    if (Math.abs(dx) < span * .9) continue;
+    let ok = 0; for (const [x, y] of pts) if (cdist(d, (y * w + x) * 4, [d[(y * w + x + dx) * 4], d[(y * w + x + dx) * 4 + 1], d[(y * w + x + dx) * 4 + 2]]) < 45) ok++;
+    const sim = ok / pts.length; if (!best || sim > best.sim) best = {dx, sim};
+  }
+  if (!best || best.sim < .72) return;
+  // the matched area must not just be empty background: the rows have to differ from the space between them
+  let dx = Math.round(best.dx / s);
+  // number the left table first: if the rows were found on the right, move everything to the left copy
+  if (dx < 0) { f.cols.forEach(c => { c.x += dx; }); f.dashes = (f.dashes || []).map(m => ({...m, x: m.x + dx})); dx = -dx; }
+  f.dashes = (f.dashes || []).concat((f.dashes || []).map(m => ({...m, x: m.x + dx})));
+  f.side2 = {dx, twin: true};
+}
+/* dashes path, or a band across both tables: columns repeat after a wide gap */
+function splitSides(f){
+  if (f.side2 || f.cols.length < 4 || f.cols.length % 2) return;
+  const c = [...f.cols].sort((a, b) => a.x - b.x), k = c.length / 2;
+  const gaps = c.slice(1).map((x, i) => x.x - (c[i].x + c[i].w));
+  const mid = gaps[k - 1], others = gaps.filter((_, i) => i !== k - 1);
+  if (!(mid > Math.max(...others, 0) * 1.6 && mid > 0)) return;
+  const dx = c[k].x - c[0].x;
+  for (let i = 0; i < k; i++) if (Math.abs(c[k + i].x - c[i].x - dx) > Math.max(8, dx * .04) || Math.abs(c[k + i].w - c[i].w) > Math.max(8, c[i].w * .2)) return;
+  f.cols = c.slice(0, k); f.side2 = {dx};
 }
 function detectBase(img){
   let f = null;
@@ -1693,8 +1712,9 @@ function openDetect(t, img, found, file){
   const custom = {label: 'Custom', cols: ['Team', ...Array.from({length: Math.max(0, nu - 1)}, (_, i) => 'Column ' + (i + 2))]};
   DT.presets = [...(fromClaude ? [fromClaude] : []), ...presets, custom];
   const extra = (found.spots || []).length;
-  $('#dt-title').textContent = n ? 'Table found' : 'Spots found';
+  $('#dt-title').textContent = n ? (found.side2 ? 'Two-column table found' : 'Table found') : 'Spots found';
   $('#dt-summary').textContent = (found.rows.length ? `${found.rows.length} rows and ${n} column${n === 1 ? '' : 's'} ${SOURCE_TEXT[found.source] || SOURCE_TEXT.cells}.` : `Claude found ${extra} spot${extra === 1 ? '' : 's'} in your design.`) + (extra && found.rows.length ? ` Plus ${extra} other spot${extra === 1 ? '' : 's'} outside the table.` : '') + ' Only these spots become editable; your headers and everything else stay as part of the background. Column names are just labels for filling in and importing, and are never drawn on the graphic.';
+  if (found.side2 && found.rows.length) $('#dt-summary').textContent = `${found.rows.length * 2} rows in two tables side by side: rows 1–${found.rows.length} on the left, ${found.rows.length + 1}–${found.rows.length * 2} on the right. Each side has ${n} column${n === 1 ? '' : 's'}. Only these spots become editable; your headers and everything else stay as part of the background.`;
   $('#dt-preset').innerHTML = DT.presets.map((p, i) => `<option value="${i}">${esc(p.label)}: ${esc(p.cols.join(' · '))}${p.label === 'Custom' ? ' (rename below)' : ''}</option>`).join('');
   $('#dt-preset').closest('.field').classList.toggle('hidden', !n);
   const fonts = allFontNames();
@@ -1738,8 +1758,8 @@ async function applyDetect(){
   try {
     if ($('#dt-clean').checked && found.dashes.length) {
       // only clean marks that sit in a column that is used (never fixed design text)
-      const inUsed = m => { const cx = m.x + m.w / 2; const ci = found.cols.findIndex(c => cx >= c.x - 4 && cx <= c.x + c.w + 4); return ci < 0 ? spots.length > 0 : use[ci]; };
-      const marks = found.dashes.filter(inUsed);
+      const inUsed = m => { const cx = m.x + m.w / 2, dx2 = found.side2 ? found.side2.dx : null; const ci = found.cols.findIndex(c => (cx >= c.x - 4 && cx <= c.x + c.w + 4) || (dx2 != null && cx >= c.x + dx2 - 4 && cx <= c.x + dx2 + c.w + 4)); return ci < 0 ? spots.length > 0 : use[ci]; };
+      let marks = found.dashes.filter(inUsed);
       toast('Removing the placeholders…');
       const cv = cleanDashes(img, marks), blob = await canvasBlob(cv);
       if (!t.originalImage) t.originalImage = {...t.image};
@@ -1748,10 +1768,11 @@ async function applyDetect(){
     }
     const base = {font, weight, fit: true, color, valign: 'middle', ls: 0, sw: 0, sc: '#000000'};
     const zones = [];
-    found.rows.forEach((r, ri) => found.cols.forEach((c, ci) => {
+    const sides = found.side2 ? [0, found.side2.dx] : [0], R = found.rows.length;
+    sides.forEach((dx, si) => found.rows.forEach((r, ri) => found.cols.forEach((c, ci) => {
       if (!use[ci]) return;
-      zones.push({...base, id: uid(), type: types[ci], field: names[ci], row: ri + 1, x: c.x, y: c.dy != null ? r.top + c.dy : r.top, w: c.w, h: c.h || r.h, size: Math.round(r.h * pct), align: isTeamType(types[ci]) ? 'left' : (c.align || 'center'), upper: types[ci] !== 'text', sample: types[ci] === 'text' ? String((ri * 7 + ci * 3) % 40 + 1) : ''});
-    }));
+      zones.push({...base, id: uid(), type: types[ci], field: names[ci], row: si * R + ri + 1, x: c.x + dx, y: c.dy != null ? r.top + c.dy : r.top, w: c.w, h: c.h || r.h, size: Math.round(r.h * pct), align: isTeamType(types[ci]) ? 'left' : (c.align || 'center'), upper: types[ci] !== 'text', sample: types[ci] === 'text' ? String((ri * 7 + ci * 3) % 40 + 1) : ''});
+    })));
     const seen = {};
     spots.forEach(sp => { let f = sp.name; if (isTeamType(sp.type)) f = sp.name; else { seen[f] = (seen[f] || 0) + 1; if (seen[f] > 1) f += ' ' + seen[f]; }
       zones.push({...base, id: uid(), type: sp.type, field: f, row: 0, x: sp.x, y: sp.y, w: sp.w, h: sp.h, size: Math.round(sp.h * .75), align: 'center', upper: sp.type !== 'text', sample: ''}); });
@@ -2157,25 +2178,25 @@ function applyImport(decided){
   if (a && b && a.total === b.total && a.wins === b.wins && a.kills === b.kills && a.kp === b.kp) tieNote = ` ${a.team} and ${b.team} were level, so ${a.team} took the last spot on tie-breakers.`;
   else if (a && b && a.total === b.total) tieNote = ` ${a.team} beat ${b.team} to the last spot on tie-breakers.`;
   const more = st.teams.length > R ? ` Top ${R} of ${st.teams.length} teams shown.` : '';
-  const L = t.layout, pages = L && L.mode === 'pages' ? Math.ceil(R / tm.base) : 1;
-  const how = L && L.mode === 'long' && R > tm.base ? ' All teams are on one long graphic.' : pages > 1 ? ` All teams are on ${pages} pages.` : '';
+  const L = t.layout, pages = L && L.mode !== 'top' ? Math.ceil(R / tm.base) : 1;
+  const how = pages > 1 ? ` All teams are on ${pages} pages.` : '';
   S.page = 0;
   toast(`Filled ${Math.min(st.teams.length, R)} rows.${how || (tieNote ? more + tieNote : more)} Check the preview, then download.${calcNote}`);
 }
 function askLayout(t, n, base){
-  const prev = (t.layout && t.layout.mode) || 'top';
+  const prev = (t.layout && t.layout.mode) === 'top' ? 'top' : t.layout ? 'pages' : 'top';
   const pages = Math.ceil(n / base);
+  const bigger = S.templates.filter(x => x !== t && !x.example).map(x => ({x, rows: tableModel(x, true).rows.length})).filter(o => o.rows > base).sort((a, b) => b.rows - a.rows);
   $('#lay-summary').textContent = `Your results have ${n} teams, but this design has ${base} rows.`;
   $('#lay-opts').innerHTML = `
-    <label class="layopt"><input type="radio" name="lay" value="top" ${prev === 'top' ? 'checked' : ''}><span><b>${base} teams</b><small>Only the top ${base}. If teams are level for the last spot, the tie-breakers decide and only the team ahead goes in.</small></span></label>
-    <label class="layopt"><input type="radio" name="lay" value="all" ${prev !== 'top' ? 'checked' : ''}><span><b>${n > 24 ? '24+' : 'All ' + n} teams</b><small>Fit every team, for overall standings.</small></span></label>
-    <div class="layall ${prev === 'top' ? 'hidden' : ''}" id="lay-all">
-      <label class="check"><input type="radio" name="layk" value="long" ${prev !== 'pages' ? 'checked' : ''}> One long graphic (${n} rows)</label>
-      <label class="check"><input type="radio" name="layk" value="pages" ${prev === 'pages' ? 'checked' : ''}> ${pages} pages of ${base}</label>
-    </div>`;
-  $$('#lay-opts input[name="lay"]').forEach(i => i.addEventListener('change', () => $('#lay-all').classList.toggle('hidden', $('#lay-opts input[name="lay"]:checked').value === 'top')));
+    <p class="lab">${base} teams</p>
+    <label class="layopt"><input type="radio" name="lay" value="top" ${prev === 'top' ? 'checked' : ''}><span><b>Top ${base} on this design</b><small>If teams are level for the last spot, the tie-breakers decide and only the team ahead goes in.</small></span></label>
+    <p class="lab" style="margin-top:6px">24+ teams</p>
+    <label class="layopt"><input type="radio" name="lay" value="pages" ${prev === 'pages' ? 'checked' : ''}><span><b>All ${n} on ${pages} pages</b><small>This design repeated: teams 1–${base} on page 1, ${base + 1}–${Math.min(n, base * 2)} on page 2${pages > 2 ? ', and so on' : ''}.</small></span></label>
+    ${bigger.map(o => `<label class="layopt"><input type="radio" name="lay" value="tpl:${esc(o.x.id)}"><span><b>${esc(o.x.name)}</b><small>Your ${o.rows}-team design${o.rows >= n ? `, fits all ${n}` : `: top ${o.rows}, or pages after that`}.</small></span></label>`).join('')}
+    ${bigger.length ? '' : '<p class="help">Have a design made for more teams, like two tables of 12 side by side? Upload it as a template and it will show up here.</p>'}`;
   $('#lay-rank').classList.add('hidden');
-  if (!tableModel(t, true).cols.some(c => roleOf(c.field) === 'rank')) findRankCell(t).then(c => { const tb = tableModel(t, true); const printed = tb.cols.length && t.zones.some(z => z.row === 1) && !c; $('#lay-rank').classList.toggle('hidden', !printed || !needsRankNote(t)); });
+  if (!tableModel(t, true).cols.some(c => roleOf(c.field) === 'rank')) findRankCell(t).then(c => { $('#lay-rank').classList.toggle('hidden', !!c || !needsRankNote(t)); });
   LAY = {n, base};
   $('#layout-modal').classList.remove('hidden');
 }
@@ -2184,16 +2205,22 @@ let LAY = null;
 function needsRankNote(t){ return !!t.printedRank; }
 function layoutChosen(){
   const t = S.cur; if (!t || !LAY) return;
-  const v = $('#lay-opts input[name="lay"]:checked').value, k = ($('#lay-opts input[name="layk"]:checked') || {}).value || 'long';
-  t.layout = v === 'top' ? {mode: 'top', n: LAY.base} : {mode: k, n: LAY.n};
+  const v = $('#lay-opts input[name="lay"]:checked').value;
   $('#layout-modal').classList.add('hidden');
+  if (v.startsWith('tpl:')) {
+    const other = S.templates.find(x => x.id === v.slice(4)); if (!other) return;
+    const im = IM; openFill(other); IM = im;
+    showImport(im.st, im.grids); applyImport(); if ($('#imp-result')) $('#imp-result').innerHTML = '';
+    return;
+  }
+  t.layout = v === 'top' ? {mode: 'top', n: LAY.base} : {mode: 'pages', n: LAY.n};
   applyImport(true);
 }
 function layoutCard(t){
   const L = t.layout, tm = tableModel(t); if (!L || L.mode === 'top' || tm.rows.length <= tm.base) return '';
   const pages = Math.ceil(tm.rows.length / tm.base);
-  return `<div class="ffrow"><div class="ff-lab">All ${tm.rows.length} teams<small>${L.mode === 'long' ? 'One long graphic' : `${pages} pages of ${tm.base}`}</small></div>
-    <select id="lay-mode" style="width:auto" aria-label="Layout"><option value="long" ${L.mode === 'long' ? 'selected' : ''}>Long graphic</option><option value="pages" ${L.mode === 'pages' ? 'selected' : ''}>Pages</option><option value="top">Top ${tm.base} only</option></select></div>`;
+  return `<div class="ffrow"><div class="ff-lab">All ${tm.rows.length} teams<small>${pages} pages of ${tm.base}</small></div>
+    <select id="lay-mode" style="width:auto" aria-label="Teams shown"><option value="pages" selected>All on pages</option><option value="top">Top ${tm.base} only</option></select></div>`;
 }
 function scoringCard(t){
   const sc = scoringOf(t);
