@@ -26,8 +26,8 @@
 html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
 body{background:radial-gradient(1200px 500px at 85% -10%, rgba(110,231,183,.07), transparent 60%), var(--bg)}
 h1,h2,h3{font-family:var(--display);font-weight:400;letter-spacing:0;line-height:1.15;text-wrap:balance;margin:0}
-h2{font-size:1.6rem}
-h3{font-size:1rem}
+h2{font-size:1.9rem}
+h3{font-size:1.2rem}
 p{margin:0}
 button,input,select,textarea{font:inherit;color:inherit}
 img{max-width:100%}
@@ -47,7 +47,7 @@ a{color:var(--accent)}
 .top-in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:10px;margin-right:auto}
 .mark{width:32px;height:32px;color:var(--accent);flex:none}
-.brand h1{font-size:1rem;letter-spacing:0;font-family:var(--display);font-weight:400}
+.brand h1{font-size:1.35rem;letter-spacing:0;font-family:var(--display);font-weight:400}
 .brand h1 b{color:var(--accent);font-weight:400}
 .badge{font-family:var(--label);font-weight:700;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
 .badge.cloud{border-color:rgba(61,220,151,.45);color:var(--ok)}
@@ -99,24 +99,26 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;backgrou
 
 /* templates page */
 .hero{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:22px;align-items:end;margin-bottom:22px}
-.hero h2{font-size:clamp(1.7rem,6.5vw,3rem);line-height:1.12}
-.hero .sub{margin-top:12px;color:var(--muted);max-width:52ch}
+.hero h2{font-size:clamp(2.3rem,10vw,3.8rem);line-height:1.08;margin:0}
+.hero .kicker{display:block;margin:0 0 14px;line-height:1.5}
+.hero h2 span{display:block;margin-top:2px}
+.hero .sub{margin-top:18px;color:var(--muted);max-width:52ch;line-height:1.6}
 .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .stat{background:var(--panel);border:1px solid var(--line);padding:12px;clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%)}
-.stat b{display:block;font-family:var(--display);font-weight:400;font-size:1.5rem;line-height:1;font-variant-numeric:tabular-nums}
+.stat b{display:block;font-family:var(--display);font-weight:400;font-size:2rem;margin-bottom:4px;line-height:1;font-variant-numeric:tabular-nums}
 .stat span{font-family:var(--label);font-weight:700;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
 .head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
 .step{background:var(--panel);border:1px solid var(--line);padding:12px 14px;display:flex;gap:12px;font-size:.88rem;color:var(--muted)}
-.step b{font-family:var(--display);font-weight:400;font-size:1.15rem;color:var(--accent);line-height:1}
-.step strong{display:block;color:var(--text);font-family:var(--display);font-weight:400;font-size:.85rem;margin-bottom:4px}
+.step b{font-family:var(--display);font-weight:400;font-size:1.6rem;color:var(--accent);line-height:1}
+.step strong{display:block;color:var(--text);font-family:var(--display);font-weight:400;font-size:1.1rem;margin-bottom:4px}
 .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
 .tcard{background:var(--panel);border:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s}
 .tcard:hover{border-color:var(--line-2)}
 .thumb{aspect-ratio:4/3;background:#05070a repeating-conic-gradient(#0c1016 0% 25%,#07090d 0% 50%) 50%/20px 20px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
 .thumb img{max-height:100%;max-width:100%;object-fit:contain;display:block}
 .tbody{padding:12px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line)}
-.tname{font-family:var(--display);font-weight:400;font-size:.95rem;letter-spacing:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;overflow-wrap:anywhere;line-height:1.05}
+.tname{font-family:var(--display);font-weight:400;font-size:1.2rem;letter-spacing:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;overflow-wrap:anywhere;line-height:1.05}
 .meta{font-family:var(--label);font-weight:600;font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .chip{font-family:var(--label);font-size:.7rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:2px 7px;background:rgba(255,181,71,.14);color:var(--warn)}
 .chip.lime{background:rgba(110,231,183,.12);color:var(--accent)}
@@ -170,7 +172,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
 .logo{width:56px;height:56px;flex:none;background:#05070a repeating-conic-gradient(#0c1016 0% 25%,#07090d 0% 50%) 50%/12px 12px;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:.7rem;color:var(--muted)}
 .logo img{max-width:100%;max-height:100%;object-fit:contain}
 .tinfo{flex:1;min-width:0}
-.tinfo b{display:block;overflow-wrap:anywhere;font-family:var(--display);font-weight:400;font-size:.85rem}
+.tinfo b{display:block;overflow-wrap:anywhere;font-family:var(--display);font-weight:400;font-size:1.1rem}
 .layout2{display:grid;grid-template-columns:340px minmax(0,1fr);gap:18px;align-items:start}
 .fontrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:var(--panel-2);border:1px solid var(--line)}
 .fontrow .sample{font-size:1.6rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -181,7 +183,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
 #toast.bad{border-left-color:var(--bad)}
 .acc{background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--accent)}
 .acc-item+.acc-item{border-top:1px solid var(--line)}
-.acc-item>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 16px;font-family:var(--display);font-weight:400;font-size:.95rem;letter-spacing:0;min-height:54px}
+.acc-item>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 16px;font-family:var(--display);font-weight:400;font-size:1.2rem;letter-spacing:0;min-height:54px}
 .acc-item>summary::-webkit-details-marker{display:none}
 .acc-item>summary::after{content:"";width:9px;height:9px;border-right:2px solid var(--accent);border-bottom:2px solid var(--accent);transform:rotate(45deg);margin-top:-4px;transition:transform .15s}
 .acc-item[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
@@ -228,7 +230,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
     <div class="hero">
       <div>
         <p class="kicker">Results graphics · Any game</p>
-        <h2>Fill the table.<br><span class="lime">Post the results.</span></h2>
+        <h2>Fill the table. <span class="lime">Post the results.</span></h2>
         <p class="sub">Upload your design once. The spots are found for you, results come in from a spreadsheet or a screenshot, and the graphic comes out at full quality.</p>
         <div class="row" style="margin-top:16px"><label class="btn primary file-btn" for="tpl-upload"><input type="file" id="tpl-upload" accept="image/png,image/jpeg,image/webp">Upload template design</label></div>
       </div>
@@ -290,7 +292,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
   <section id="view-fill" class="hidden">
     <div class="bar">
       <button class="btn ghost" data-act="back">← Templates</button>
-      <input id="fill-title" class="grow" aria-label="Template name" style="font-family:var(--display);font-weight:400;font-size:.95rem;background:transparent;border-color:transparent">
+      <input id="fill-title" class="grow" aria-label="Template name" style="font-family:var(--display);font-weight:400;font-size:1.2rem;background:transparent;border-color:transparent">
       <button class="btn" data-act="to-edit">Mark spots</button>
     </div>
     <div class="fill">
