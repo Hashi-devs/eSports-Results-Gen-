@@ -102,6 +102,21 @@ input[type=file]{font-size:.85rem;max-width:100%}
 .pages-more:not(:empty){margin-top:14px}
 .edpages{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .edpages .btn.on{border-color:var(--accent);color:var(--accent)}
+.dcard{margin-top:10px;border:1px solid var(--line);background:var(--panel-2)}
+.dcard>summary{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;list-style:none}
+.dcard>summary::-webkit-details-marker{display:none}
+.dcard .ff-lab{flex:1;font-family:var(--label);font-size:.9rem}
+.dcard .dstate{font-size:.8rem;color:var(--muted)}
+.dcard[open] .dstate{display:none}
+.dcard .chev{width:9px;height:9px;border-right:2px solid var(--text);border-bottom:2px solid var(--text);transform:rotate(45deg);margin:-4px 4px 0 0;transition:transform .15s}
+.dcard[open] .chev{transform:rotate(-135deg);margin-top:4px}
+.dcard>.help,.dcard>.form{padding:0 12px 12px}
+.ntopt{display:flex;gap:12px;align-items:center;padding:14px;border:1px solid var(--line);background:var(--panel-2);cursor:pointer;position:relative}
+.ntopt:hover{border-color:var(--accent)}
+.ntopt input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.ntopt .num{font-family:var(--display);font-size:1.4rem;min-width:56px;color:var(--accent)}
+.ntopt b{display:block;font-family:var(--label)}
+.ntopt small{display:block;color:var(--muted);font-size:.8rem;margin-top:3px;line-height:1.4}
 .layopt{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);background:var(--panel-2);cursor:pointer}
 .layopt:has(input:checked){border-color:var(--accent)}
 .layopt input{width:18px;height:18px;margin-top:2px;accent-color:var(--accent);flex:none}
@@ -220,7 +235,9 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
 .acc-item[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
 .acc-item>summary .sum-note{margin-left:auto;margin-right:10px;font-family:var(--body);font-weight:500;font-size:.8rem;letter-spacing:0;text-transform:none;color:var(--muted)}
 .acc-body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px;overscroll-behavior:contain}
+html.modal-open,html.modal-open body{overflow:hidden;touch-action:none}
+html.modal-open .modal .card{touch-action:pan-y}
 .modal .card{max-width:640px;width:100%;max-height:92vh;overflow:auto}
 .modal .card::before{content:"";position:absolute;left:-1px;right:-1px;top:-1px;height:2px;background:var(--accent)}
 .modal img{display:block;margin:0 auto;max-height:65vh}
@@ -263,13 +280,13 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
         <p class="kicker">Results graphics · Any game</p>
         <h2>Fill the table. <span class="lime">Post the results.</span></h2>
         <p class="sub">Upload your design once. The spots are found for you, results come in from a spreadsheet or a screenshot, and the graphic comes out at full quality.</p>
-        <div class="row" style="margin-top:20px"><label class="btn primary file-btn" for="tpl-upload"><input type="file" id="tpl-upload" accept="image/png,image/jpeg,image/webp" multiple>Upload template design</label></div>
+        <div class="row" style="margin-top:20px"><button class="btn primary" data-act="new-tpl">Upload template design</button></div>
         <p class="stats" id="stats"></p>
       </div>
     </div>
     <div class="steps">
       <div class="step"><b>01</b><span><strong>Upload</strong>Your finished design at full size, with dashes, placeholder text or empty cells where results go.</span></div>
-      <div class="step"><b>02</b><span><strong>Check the spots</strong>Rows and columns are found for you. Name them, pick the font, done.</span></div>
+      <div class="step"><b>02</b><span><strong>Check the spots</strong>Rows and columns are found for you. Fine-tune anything later in Mark spots.</span></div>
       <div class="step"><b>03</b><span><strong>Import & post</strong>Drop in results or type them, then download. Same size, same quality.</span></div>
     </div>
     <div class="head"><h3>Your templates</h3></div>
@@ -406,6 +423,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
     <h3 id="dt-title">Table found</h3>
     <div class="field"><label for="dt-name">Template name</label><input id="dt-name" placeholder="e.g. MOG Overall Standings"></div>
     <p class="help" id="dt-summary"></p>
+    <div class="hidden" id="dt-advanced">
     <div class="field"><label for="dt-preset">Columns</label><select id="dt-preset"></select></div>
     <div id="dt-cols" class="form" style="gap:8px"></div>
     <div class="grid2">
@@ -414,10 +432,23 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
       <div class="field"><label for="dt-color">Text colour</label><div class="row" style="flex-wrap:nowrap"><input type="color" id="dt-color" aria-label="Text colour"><input id="dt-colorhex" aria-label="Colour code"></div></div>
       <div class="field"><label for="dt-size">Text size (% of row)</label><input type="number" id="dt-size" min="20" max="95" value="48"></div>
     </div>
+    </div>
     <label class="check"><input type="checkbox" id="dt-clean" checked> Remove the dashes from the design</label>
     <p class="help" id="dt-replace"></p>
     <div class="row"><button class="btn primary" data-act="detect-apply">Set up the spots</button><button class="btn ghost" data-act="detect-cancel">I'll mark them myself</button></div>
     <p class="help" id="dt-claude">Not right? <button class="btn sm" data-act="ask-claude">Ask Claude to look instead</button></p>
+  </div>
+</div>
+<div id="new-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="nt-title">
+  <div class="card">
+    <h3 id="nt-title">How many teams is this design for?</h3>
+    <div class="form" style="gap:10px;margin-top:12px">
+      <label class="ntopt"><input type="file" id="nt-12" accept="image/png,image/jpeg,image/webp" aria-label="12 teams: choose your design"><span class="num">12</span><span><b>12 teams</b><small>One design with a table of up to 12 teams.</small></span></label>
+      <p class="lab" style="margin:4px 0 0">24+ teams</p>
+      <label class="ntopt"><input type="file" id="nt-24" accept="image/png,image/jpeg,image/webp" aria-label="24 or more teams on one design: choose your design"><span class="num">24+</span><span><b>One design</b><small>All teams on one graphic, like two tables of 12 side by side.</small></span></label>
+      <label class="ntopt"><input type="file" id="nt-pages" accept="image/png,image/jpeg,image/webp" multiple aria-label="24 or more teams over several pages: choose all the pages"><span class="num">24+</span><span><b>Several pages</b><small>Pick all the pages together (page 1, page 2…). Teams carry on from one page to the next.</small></span></label>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="nt-cancel">Cancel</button></div>
   </div>
 </div>
 <div id="layout-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="lay-title">
@@ -751,7 +782,7 @@ function renderTemplates(){
   const made = (() => { try { return +localStorage.getItem('mds-made') || 0; } catch (e) { return 0; } })();
   const pl = (n, a, b) => `<span><b>${n}</b>${n === 1 ? a : b}</span>`;
   $('#stats').innerHTML = pl(allTemplates().length, 'template', 'templates') + pl(S.teams.length, 'team', 'teams') + pl(S.templates.reduce((n, t) => n + t.zones.length, 0), 'spot marked', 'spots marked') + pl(made, 'graphic made', 'graphics made');
-  if (!list.length) { $('#tpl-grid').innerHTML = `<div class="empty" style="grid-column:1/-1"><p class="kicker" style="margin-bottom:8px">No templates yet</p><p>Upload your finished results design to start. PNG at full size works best.</p><div class="row" style="justify-content:center;margin-top:14px"><label class="btn primary file-btn" for="tpl-upload2"><input type="file" id="tpl-upload2" accept="image/png,image/jpeg,image/webp" multiple>Upload your design</label></div></div>`; $('#tpl-upload2').addEventListener('change', e => { uploadTemplate(e.target.files); e.target.value = ''; }); return; }
+  if (!list.length) { $('#tpl-grid').innerHTML = `<div class="empty" style="grid-column:1/-1"><p class="kicker" style="margin-bottom:8px">No templates yet</p><p>Upload your finished results design to start. PNG at full size works best.</p><div class="row" style="justify-content:center;margin-top:14px"><button class="btn primary" data-act="new-tpl">Upload your design</button></div></div>`; return; }
   $('#tpl-grid').innerHTML = list.map(t => `
     <article class="tcard" data-id="${esc(t.id)}">
       <div class="thumb"><img alt="" data-ref="${esc(t.image.ref)}"></div>
@@ -1186,7 +1217,7 @@ function renderFillForm(){
         return `<td><input data-val="${esc(k)}" value="${esc(S.fill.values[k] ?? '')}" ${auto ? 'readonly title="Worked out automatically" style="opacity:.8"' : ''} aria-label="${esc(c.field + ' ' + r)}" inputmode="${/kill|point|pts|score|total|place|rank|#/i.test(c.field) ? 'decimal' : 'text'}"></td>`; }).join('')}</tr>`).join('')}
       </tbody></table></div>
       ${totalField(t) ? `<p class="help">The graphic always lists teams from the highest ${esc(totalField(t))} to the lowest, so you can type them in any order.</p>` : ''}
-      ${textCols.length > 1 ? `<details ${t.calc ? 'open' : ''}><summary class="lab" style="cursor:pointer">Auto total ${t.calc ? `· on: ${esc(t.calc.target)} = ${esc(t.calc.from.join(' + '))}` : '· off'}</summary>
+      ${textCols.length > 1 ? `<details class="dcard"><summary><span class="ff-lab">Auto total</span><span class="dstate">${t.calc ? 'On' : 'Off'}</span><span class="chev" aria-hidden="true"></span></summary>
         <p class="help" style="margin-top:6px">Works out one column for you by adding others together, so you never type it. While it's on, that column is locked in the table above.</p>
         <div class="form" style="gap:8px;margin-top:8px">
           <div class="row"><label class="lab" for="calc-target">Column worked out</label><select id="calc-target" style="width:auto">${textCols.map(c => `<option ${(t.calc ? t.calc.target === c.field : /total/i.test(c.field)) ? 'selected' : ''}>${esc(c.field)}</option>`).join('')}</select></div>
@@ -1742,8 +1773,8 @@ function openDetect(t, img, found, file){
   DT.presets = [...(fromClaude ? [fromClaude] : []), ...presets, custom];
   const extra = (found.spots || []).length;
   $('#dt-title').textContent = n ? (found.side2 ? 'Two-column table found' : 'Table found') : 'Spots found';
-  $('#dt-summary').textContent = (found.rows.length ? `${found.rows.length} rows and ${n} column${n === 1 ? '' : 's'} ${SOURCE_TEXT[found.source] || SOURCE_TEXT.cells}.` : `Claude found ${extra} spot${extra === 1 ? '' : 's'} in your design.`) + (extra && found.rows.length ? ` Plus ${extra} other spot${extra === 1 ? '' : 's'} outside the table.` : '') + ' Only these spots become editable; your headers and everything else stay as part of the background. Column names are just labels for filling in and importing, and are never drawn on the graphic.';
-  if (found.side2 && found.rows.length) $('#dt-summary').textContent = `${found.rows.length * 2} rows in two tables side by side: rows 1–${found.rows.length} on the left, ${found.rows.length + 1}–${found.rows.length * 2} on the right. Each side has ${n} column${n === 1 ? '' : 's'}. Only these spots become editable; your headers and everything else stay as part of the background.`;
+  $('#dt-summary').textContent = (found.rows.length ? `${found.rows.length} rows and ${n} column${n === 1 ? '' : 's'} ${SOURCE_TEXT[found.source] || SOURCE_TEXT.cells}.` : `Claude found ${extra} spot${extra === 1 ? '' : 's'} in your design.`) + (extra && found.rows.length ? ` Plus ${extra} other spot${extra === 1 ? '' : 's'} outside the table.` : '') + ' Only these spots become editable; the rest of your design stays as it is. You can rename columns and change the text style later in Mark spots.';
+  if (found.side2 && found.rows.length) $('#dt-summary').textContent = `${found.rows.length * 2} rows in two tables side by side: rows 1–${found.rows.length} on the left, ${found.rows.length + 1}–${found.rows.length * 2} on the right. Each side has ${n} column${n === 1 ? '' : 's'}. You can rename columns and change the text style later in Mark spots.`;
   $('#dt-preset').innerHTML = DT.presets.map((p, i) => `<option value="${i}">${esc(p.label)}: ${esc(p.cols.join(' · '))}${p.label === 'Custom' ? ' (rename below)' : ''}</option>`).join('');
   $('#dt-preset').closest('.field').classList.toggle('hidden', !n);
   const fonts = allFontNames();
@@ -1886,7 +1917,7 @@ function scoringOf(t){
 }
 function ffCard(t){
   const sc = scoringOf(t);
-  return `<div class="ffrow"><div class="ff-lab">FF official scoring<small>${sc.ff ? 'Placement points 12, 9, 8 … and 1 point per kill' : 'Using your own points'}</small></div>
+  return `<div class="ffrow"><div class="ff-lab">FF official scoring</div>
     <button type="button" class="qbtn" data-act="ff-help" aria-label="How FF official scoring works">?</button>
     <label class="switch" title="FF official scoring"><input type="checkbox" id="ff-toggle" ${sc.ff ? 'checked' : ''} aria-label="FF official scoring"><span></span></label></div>
   ${sc.ff ? '' : `<div class="ffcustom"><div class="field"><label for="ff-pts">Points for 1st, 2nd, 3rd…</label><input id="ff-pts" value="${esc(sc.pts.join(', '))}" inputmode="decimal"></div><div class="field"><label for="ff-kill">Per kill</label><input id="ff-kill" type="number" step="0.5" min="0" value="${sc.perKill}"></div></div>`}`;
@@ -2117,6 +2148,7 @@ Reply with ONLY a JSON object: {"columns": ["Team", ...], "rows": [["...", ...],
 Rules:
 - One row per team${images && images.length > 1 ? ' per image' : ''}. Copy team names exactly as written.
 - Use the column names shown (for example Booyah, WWCD, Kills, KP, PP, Placement, Total). If a team's placement in a single match is only shown by row order, add a "Placement" column with 1 for the first row, 2 for the second and so on.
+- Free Fire match result screens show each team's placement number (1, 2, 3 on gold rows, then 4, 5, 6…) with its players' names and "Eliminations", but no team name. For these, the team name is the clan tag shared by most of that team's players: the same letters, numbers or symbols at the start of their names (for example FEN in FEN.TOCHEX and FEN.JERRY, or Pχ in PχAlivics and PχLevi). Ignore a player whose tag differs from the rest. Use columns Team, Placement, Kills, where Kills is the sum of that team's players' eliminations. Keep the same tag spelling for the same team in every image.
 ${images && images.length > 1 ? '- If the images are separate matches, add a first column "Match" holding the image number (1 for the first image). If they are pages of one standings table, do not add Match.\n' : ''}- Numbers as plain digits. Leave a cell as "" if it cannot be read. Do not invent teams or values.
 ${text ? '\nResults text:\n' + text.slice(0, 60000) : ''}`;
   try {
@@ -2466,6 +2498,8 @@ async function act(a, el){
     case 'font-del': { const f = S.fonts.find(x => x.id === id); if (!f) break; try { await S.store.del('fonts', id); S.fonts = S.fonts.filter(x => x !== f); S.store.delBlob(f.ref); renderFonts(); toast('Font deleted. Spots using it fall back to another font.'); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
     case 'ff-help': ffHelp(); break;
     case 'lay-go': layoutChosen(); break;
+    case 'new-tpl': $('#new-modal').classList.remove('hidden'); break;
+    case 'nt-cancel': $('#new-modal').classList.add('hidden'); break;
     case 'lay-cancel': $('#layout-modal').classList.add('hidden'); break;
     case 'modal-close': $('#modal').classList.add('hidden'); $('#modal-body').innerHTML = ''; break;
   }
@@ -2487,7 +2521,10 @@ $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') act('m
 /* ---------- init ---------- */
 (async function init(){
   wireStage(); wireFill();
-  $('#tpl-upload').addEventListener('change', e => { uploadTemplate(e.target.files); e.target.value = ''; });
+  // the page behind a popup never scrolls while it is open
+  const lockScroll = () => document.documentElement.classList.toggle('modal-open', $$('.modal').some(m => !m.classList.contains('hidden')));
+  const mo = new MutationObserver(lockScroll); $$('.modal').forEach(m => mo.observe(m, {attributes: true, attributeFilter: ['class']}));
+  ['nt-12', 'nt-24', 'nt-pages'].forEach(id => $('#' + id).addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; $('#new-modal').classList.add('hidden'); if (f.length) uploadTemplate(f); }));
   $('#replace-img').addEventListener('change', e => { replaceImage(e.target.files[0]); e.target.value = ''; });
   $('#team-form').addEventListener('submit', saveTeam);
   $('#tm-logo').addEventListener('change', e => { const f = e.target.files[0]; $('#tm-preview').innerHTML = f ? `<img alt="" src="${URL.createObjectURL(f)}">` : 'No logo'; });
