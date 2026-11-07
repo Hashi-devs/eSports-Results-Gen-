@@ -145,9 +145,11 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;backgrou
 
 /* fill */
 .fill{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px;align-items:start}
-.preview{position:sticky;top:76px;display:flex;flex-direction:column;gap:10px}
-.pv{background:#05070a repeating-conic-gradient(#0c1016 0% 25%,#07090d 0% 50%) 50%/20px 20px;border:1px solid var(--line);display:flex;justify-content:center;align-items:center;padding:8px;min-height:200px}
-.pv canvas{max-width:100%;max-height:64vh;width:auto;height:auto;display:block}
+.preview{position:sticky;top:76px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.pv{min-width:0;overflow:hidden;background:#05070a repeating-conic-gradient(#0c1016 0% 25%,#07090d 0% 50%) 50%/20px 20px;border:1px solid var(--line);display:flex;justify-content:center;align-items:center;padding:8px;min-height:200px}
+.pv canvas{max-width:100%;max-height:64vh;width:auto;height:auto;display:block;min-width:0}
+.form{min-width:0}
+#fill-title{min-width:0;text-overflow:ellipsis}
 .form{display:flex;flex-direction:column;gap:14px}
 .tablewrap{overflow-x:auto;border:1px solid var(--line)}
 table{border-collapse:collapse;width:100%;font-size:.9rem}
@@ -191,7 +193,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
 .empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line-2)}
 
 @media (max-width: 900px){
-  .ed,.fill,.layout2,.hero{grid-template-columns:1fr}
+  .ed,.fill,.layout2,.hero{grid-template-columns:minmax(0,1fr)}
   .panel,.preview{position:static}
   .stage-wrap{max-height:62vh}
 }
