@@ -97,6 +97,11 @@ input[type=file]{font-size:.85rem;max-width:100%}
 .fftable{width:100%;border-collapse:collapse;margin:6px 0 10px;font-size:.88rem}
 .fftable td{padding:5px 8px;border-bottom:1px solid var(--line)}
 .fftable td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.pglab{margin:0 0 6px}
+.pages-more{display:flex;flex-direction:column;gap:14px}
+.pages-more:not(:empty){margin-top:14px}
+.edpages{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.edpages .btn.on{border-color:var(--accent);color:var(--accent)}
 .layopt{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);background:var(--panel-2);cursor:pointer}
 .layopt:has(input:checked){border-color:var(--accent)}
 .layopt input{width:18px;height:18px;margin-top:2px;accent-color:var(--accent);flex:none}
@@ -258,7 +263,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
         <p class="kicker">Results graphics · Any game</p>
         <h2>Fill the table. <span class="lime">Post the results.</span></h2>
         <p class="sub">Upload your design once. The spots are found for you, results come in from a spreadsheet or a screenshot, and the graphic comes out at full quality.</p>
-        <div class="row" style="margin-top:20px"><label class="btn primary file-btn" for="tpl-upload"><input type="file" id="tpl-upload" accept="image/png,image/jpeg,image/webp">Upload template design</label></div>
+        <div class="row" style="margin-top:20px"><label class="btn primary file-btn" for="tpl-upload"><input type="file" id="tpl-upload" accept="image/png,image/jpeg,image/webp" multiple>Upload template design</label></div>
         <p class="stats" id="stats"></p>
       </div>
     </div>
@@ -280,6 +285,7 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
       <span id="ed-status" class="status"></span>
       <button class="btn primary" data-act="to-fill">Fill in results →</button>
     </div>
+    <div class="bar edpages" id="ed-pages"></div>
     <div class="bar">
       <button class="btn" id="draw-btn" data-act="draw">＋ Draw spot</button>
       <button class="btn sm" data-act="zoom-out" aria-label="Zoom out">−</button>
@@ -323,8 +329,9 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
     </div>
     <div class="fill">
       <div class="preview">
+        <p class="lab pglab hidden" id="pg1-label">Page 1</p>
         <div class="pv"><canvas id="fill-canvas"></canvas></div>
-        <div class="row hidden" id="fill-pages" style="justify-content:center"><button class="btn sm" data-act="pg-prev" aria-label="Previous page">‹</button><span id="pg-label" class="small" style="min-width:96px;text-align:center"></span><button class="btn sm" data-act="pg-next" aria-label="Next page">›</button></div>
+        <div id="fill-more" class="pages-more"></div>
         <div class="row">
           <button class="btn primary" data-act="download" id="dl-btn">Download PNG</button>
           <button class="btn ghost" data-act="clear-fill">Clear entries</button>
@@ -418,7 +425,6 @@ td input,td select{min-width:90px;min-height:38px;padding:6px 8px}
     <h3 id="lay-title">How many teams?</h3>
     <p class="help" id="lay-summary"></p>
     <div id="lay-opts" class="form" style="gap:8px;margin-top:10px"></div>
-    <p class="help hidden" id="lay-rank" style="margin-top:10px">Your rank numbers are printed in the design, so extra rows and pages would repeat them. To number every team, go to Mark spots, draw a spot over the first rank number, name it Rank, set Row to 1 and copy it down. The app then covers the printed numbers and writes the right ones.</p>
     <div class="row" style="margin-top:12px"><button class="btn primary" data-act="lay-go">Fill the table</button><button class="btn ghost" data-act="lay-cancel">Cancel</button></div>
   </div>
 </div>
@@ -576,7 +582,13 @@ function matchTeam(v){
 }
 function teamOf(sel){ if (!sel) return null; if (sel.id) { const t = teamById(sel.id); if (t) return t; } return sel.name ? {name: sel.name} : null; }
 
-const allTemplates = () => S.templates;
+const allTemplates = () => S.templates.filter(t => !t.parent);
+/* multi-page templates: page 1 is the template, later pages are linked to it (parent + pageNo) */
+const rootOf = t => (t && t.parent && S.templates.find(x => x.id === t.parent)) || t;
+function pagesOf(t){ const r = rootOf(t); if (!r) return []; return [r, ...S.templates.filter(x => x.parent === r.id).sort((a, b) => (a.pageNo || 0) - (b.pageNo || 0))]; }
+function allZones(t){ if (!t) return []; if (t.parent) return t.zones; const ps = pagesOf(t); return ps.length > 1 ? ps.flatMap(p => p.zones) : t.zones; }
+/* rows on a later page carry on from the pages before it */
+function rowOffsetFor(t){ const ps = pagesOf(t), i = ps.indexOf(t); let m = 0; ps.slice(0, Math.max(0, i)).forEach(p => p.zones.forEach(z => { if (z.row > m) m = z.row; })); return m; }
 
 /* ---------- rendering ---------- */
 function resolveZone(z, data, opts){
@@ -738,14 +750,14 @@ function renderTemplates(){
   if (!S.store) return;
   const made = (() => { try { return +localStorage.getItem('mds-made') || 0; } catch (e) { return 0; } })();
   const pl = (n, a, b) => `<span><b>${n}</b>${n === 1 ? a : b}</span>`;
-  $('#stats').innerHTML = pl(S.templates.length, 'template', 'templates') + pl(S.teams.length, 'team', 'teams') + pl(S.templates.reduce((n, t) => n + t.zones.length, 0), 'spot marked', 'spots marked') + pl(made, 'graphic made', 'graphics made');
-  if (!list.length) { $('#tpl-grid').innerHTML = `<div class="empty" style="grid-column:1/-1"><p class="kicker" style="margin-bottom:8px">No templates yet</p><p>Upload your finished results design to start. PNG at full size works best.</p><div class="row" style="justify-content:center;margin-top:14px"><label class="btn primary file-btn" for="tpl-upload2"><input type="file" id="tpl-upload2" accept="image/png,image/jpeg,image/webp">Upload your design</label></div></div>`; $('#tpl-upload2').addEventListener('change', e => { uploadTemplate(e.target.files[0]); e.target.value = ''; }); return; }
+  $('#stats').innerHTML = pl(allTemplates().length, 'template', 'templates') + pl(S.teams.length, 'team', 'teams') + pl(S.templates.reduce((n, t) => n + t.zones.length, 0), 'spot marked', 'spots marked') + pl(made, 'graphic made', 'graphics made');
+  if (!list.length) { $('#tpl-grid').innerHTML = `<div class="empty" style="grid-column:1/-1"><p class="kicker" style="margin-bottom:8px">No templates yet</p><p>Upload your finished results design to start. PNG at full size works best.</p><div class="row" style="justify-content:center;margin-top:14px"><label class="btn primary file-btn" for="tpl-upload2"><input type="file" id="tpl-upload2" accept="image/png,image/jpeg,image/webp" multiple>Upload your design</label></div></div>`; $('#tpl-upload2').addEventListener('change', e => { uploadTemplate(e.target.files); e.target.value = ''; }); return; }
   $('#tpl-grid').innerHTML = list.map(t => `
     <article class="tcard" data-id="${esc(t.id)}">
       <div class="thumb"><img alt="" data-ref="${esc(t.image.ref)}"></div>
       <div class="tbody">
         <div class="tname" id="tn-${esc(t.id)}">${esc(t.name)}</div>
-        <div class="meta">${t.zones.length} spot${t.zones.length === 1 ? '' : 's'} · ${t.image.w}×${t.image.h}${tableModel(t, true).rows.length ? ` · ${tableModel(t, true).rows.length} rows` : ''}</div>
+        <div class="meta">${pagesOf(t).length > 1 ? `${pagesOf(t).length} pages · ` : ''}${allZones(t).length} spot${allZones(t).length === 1 ? '' : 's'} · ${t.image.w}×${t.image.h}${tableModel(t, true).rows.length ? ` · ${tableModel(t, true).rows.length} rows` : ''}</div>
         <div class="row">
           <button class="btn primary sm" data-act="open-fill" data-id="${esc(t.id)}">Fill in results</button>
           <button class="btn sm" data-act="open-edit" data-id="${esc(t.id)}">Mark spots</button>
@@ -759,22 +771,89 @@ function renderTemplates(){
 }
 const tplById = id => S.templates.find(t => t.id === id) || null;
 
-async function uploadTemplate(file){
-  if (!file) return;
+async function uploadTemplate(files, parent){
+  files = [...(files && files.length != null ? files : [files])].filter(Boolean);
+  if (!files.length) return;
+  // pages picked together go in name order (page1, page2… or 1, 2…)
+  files.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'}));
   try {
-    toast('Uploading design…');
-    const {w, h} = await imageSize(file);
-    const ref = await S.store.putBlob(file, file.type);
-    let nm = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-    if (!/[a-z]{3,}/i.test(nm) || /^(img|image|screenshot|photo|pxl|dsc|whatsapp image)\b/i.test(nm)) nm = 'Results template ' + (S.templates.length + 1);
-    const t = {id: uid(), name: nm, image: {ref, w, h}, zones: [], createdAt: Date.now(), updatedAt: Date.now()};
-    await S.store.put('templates', t.id, t);
-    S.templates.unshift(t);
-    openEditor(t);
+    toast(files.length > 1 ? `Uploading ${files.length} pages…` : parent ? 'Uploading page…' : 'Uploading design…');
+    const made = [];
+    for (const file of files) {
+      const {w, h} = await imageSize(file);
+      const ref = await S.store.putBlob(file, file.type);
+      const t = {id: uid(), name: '', image: {ref, w, h}, zones: [], createdAt: Date.now(), updatedAt: Date.now()};
+      made.push({t, file});
+    }
+    let root = parent ? rootOf(parent) : made[0].t;
+    if (!parent) {
+      let nm = files[0].name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\b(page|pg|p)\s*\d+\b/i, '').trim();
+      if (!/[a-z]{3,}/i.test(nm) || /^(img|image|screenshot|photo|pxl|dsc|whatsapp image)\b/i.test(nm)) nm = 'Results template ' + (allTemplates().length + 1);
+      root.name = nm;
+    }
+    let pn = Math.max(1, ...S.templates.filter(x => x.parent === root.id).map(x => x.pageNo || 0));
+    for (const m of made) {
+      if (m.t === root) continue;
+      pn++; Object.assign(m.t, {parent: root.id, pageNo: pn, name: root.name + ' · page ' + pn});
+    }
+    for (const m of made) { await S.store.put('templates', m.t.id, m.t); S.templates.unshift(m.t); }
+    const first = made[0];
+    openEditor(first.t);
+    DQ = made.slice(1);
     let found = false;
-    try { const im = await loadImage(ref); if (im) found = await runDetect(t, im, file, true); } catch (e) {}
-    if (!found) toast('Design uploaded. Tap Draw spot to mark where the results go.');
+    try { const im = await loadImage(first.t.image.ref); if (im) found = await detectPage(first.t, im, first.file); } catch (e) {}
+    if (!found) { toast(made.length > 1 ? 'Pages uploaded. Tap Draw spot to mark where the results go on each page.' : 'Design uploaded. Tap Draw spot to mark where the results go.'); DQ = []; }
   } catch (e) { toast('Upload failed: ' + errMsg(e) + '. Use a PNG, JPG or WebP under 20 MB.', true); }
+}
+let DQ = []; // pages still waiting for their spots after the current one
+/* a later page reuses page 1's column names, types and text style when its columns line up; otherwise it asks */
+async function detectPage(t, img, file){
+  const root = rootOf(t), st = root.detectSettings;
+  if (t.parent && st) {
+    let found = null; try { found = detectAny(img); } catch (e) {}
+    if (found && found.rows.length) {
+      const fc = found.cols.map((c, i) => ({c, i})).filter(o => !o.c.fixed || o.c.logo);
+      const want = st.cols;
+      if (fc.length === want.length) { await autoApply(t, img, found, st); return true; }
+    }
+    if (found) { openDetect(t, img, found, file); return true; }
+    return runDetect(t, img, file, true);
+  }
+  return runDetect(t, img, file, true);
+}
+async function autoApply(t, img, found, st){
+  const use = found.cols.map(c => !c.fixed || !!c.logo);
+  let k = 0; const names = [], types = [];
+  found.cols.forEach((c, i) => { if (use[i]) { const w = st.cols[k++]; names[i] = w.name; types[i] = w.type; } else { names[i] = 'Printed'; types[i] = 'text'; } });
+  if (st.clean && found.dashes.length) {
+    const cv = cleanDashes(img, found.dashes), blob = await canvasBlob(cv);
+    if (!t.originalImage) t.originalImage = {...t.image};
+    const ref = await S.store.putBlob(blob, 'image/png'); t.image = {ref, w: found.W, h: found.H};
+  }
+  t.zones = buildZones(found, use, names, types, st, [], rowOffsetFor(t));
+  await doSave(t);
+  if (S.cur === t) { S.sel = null; S.fit = true; layoutStage(); renderBoxes(); renderPanel(); renderChips(); previewEditor(); updateRestoreBtn(); renderEdPages(); }
+  toast(`Page ${t.pageNo}: ${tableModel(t, true).rows.length} rows set up like page 1, numbered from ${rowOffsetFor(t) + 1}.`);
+  await nextQueued();
+}
+async function nextQueued(){
+  const m = DQ.shift(); if (!m) return;
+  openEditor(m.t);
+  try { const im = await loadImage(m.t.image.ref); if (im && await detectPage(m.t, im, m.file)) return; } catch (e) {}
+  toast(`Page ${m.t.pageNo}: no table found. Tap Draw spot to mark it.`); await nextQueued();
+}
+function buildZones(found, use, names, types, st, spots, off){
+  const base = {font: st.font, weight: st.weight, fit: true, color: st.color, valign: 'middle', ls: 0, sw: 0, sc: '#000000'}, pct = st.pct;
+  const zones = [];
+  const sides = found.side2 ? [0, found.side2.dx] : [0], R = found.rows.length;
+  sides.forEach((dx, si) => found.rows.forEach((r, ri) => found.cols.forEach((c, ci) => {
+    if (!use[ci]) return;
+    zones.push({...base, id: uid(), type: types[ci], field: names[ci], row: off + si * R + ri + 1, x: c.x + dx, y: c.dy != null ? r.top + c.dy : r.top, w: c.w, h: c.h || r.h, size: Math.round(r.h * pct), align: isTeamType(types[ci]) ? 'left' : (c.align || 'center'), upper: types[ci] !== 'text', sample: types[ci] === 'text' ? String((ri * 7 + ci * 3) % 40 + 1) : ''});
+  })));
+  const seen = {};
+  spots.forEach(sp => { let f = sp.name; if (!isTeamType(sp.type)) { seen[f] = (seen[f] || 0) + 1; if (seen[f] > 1) f += ' ' + seen[f]; }
+    zones.push({...base, id: uid(), type: sp.type, field: f, row: 0, x: sp.x, y: sp.y, w: sp.w, h: sp.h, size: Math.round(sp.h * .75), align: 'center', upper: sp.type !== 'text', sample: ''}); });
+  return zones;
 }
 
 /* ---------- editor ---------- */
@@ -800,7 +879,16 @@ function openEditor(t){
   showView('edit');
   $('#ed-name').value = t.name; $('#ed-name').disabled = !!t.example;
   setStatus(t.example ? 'Example: changes are not saved' : 'Saved');
-  updateDrawBtn(); layoutStage(); renderBoxes(); renderPanel(); renderChips(); previewEditor(); updateRestoreBtn();
+  updateDrawBtn(); layoutStage(); renderBoxes(); renderPanel(); renderChips(); previewEditor(); updateRestoreBtn(); renderEdPages();
+}
+function renderEdPages(){
+  const el = $('#ed-pages'); if (!el || !S.cur) return;
+  const ps = pagesOf(S.cur);
+  if (S.cur.example) { el.innerHTML = ''; return; }
+  el.innerHTML = (ps.length > 1 ? ps.map((p, i) => `<button class="btn sm ${p === S.cur ? 'on' : ''}" data-act="ed-page" data-id="${esc(p.id)}">Page ${i + 1}${(() => { const r = [...new Set(p.zones.filter(z => z.row).map(z => z.row))]; return r.length ? ` · ${Math.min(...r)}–${Math.max(...r)}` : ''; })()}</button>`).join('') : '<span class="muted small">Standings over several pages?</span>')
+    + `<label class="btn sm ghost file-btn" for="page-upload"><input type="file" id="page-upload" accept="image/png,image/jpeg,image/webp" multiple>＋ Add page</label>`
+    + (S.cur.parent ? `<button class="btn sm ghost danger" data-confirm="del-page" data-id="${esc(S.cur.id)}">Remove this page</button>` : '');
+  $('#page-upload').addEventListener('change', e => { if (S.cur) uploadTemplate(e.target.files, S.cur); e.target.value = ''; });
 }
 function layoutStage(){
   const t = S.cur; if (!t) return;
@@ -984,7 +1072,7 @@ function wireStage(){
 /* ---------- fill ---------- */
 function fieldsOf(t){
   const map = new Map();
-  for (const z of t.zones) {
+  for (const z of allZones(t)) {
     const key = keyOf(z); let f = map.get(key);
     if (!f) { f = {key, field: z.field, row: z.row || 0, kind: null}; map.set(key, f); }
     const k = isTeamType(z.type) ? 'team' : z.type === 'image' ? 'image' : 'text';
@@ -1003,7 +1091,7 @@ function tableModel(t, baseOnly){
   if (n) { const last = rows[rows.length - 1], lf = rowF.filter(f => f.row === last); for (let r = last + 1; r <= last + n; r++) { rows.push(r); lf.forEach(f => has.add(f.field + '|' + r)); } }
   return {rows, cols, has, base};
 }
-function extraCount(t, base){ const L = t && t.layout; return (L && (L.mode === 'long' || L.mode === 'pages') && base && L.n > base) ? Math.min(L.n, 80) - base : 0; }
+function extraCount(){ return 0; }
 const fillKey = t => 'mds-fill-' + t.id;
 function loadFill(t){
   try { const v = JSON.parse(localStorage.getItem(fillKey(t)) || 'null'); if (v) return {values: v.values || {}, teams: v.teams || {}, images: {}}; } catch (e) {}
@@ -1040,83 +1128,25 @@ function rowGeom(t){
   const span = Math.max(...tops.map(x => x.bot - x.top)), off = Math.max(0, Math.floor((pitch - span) / 2));
   return {rows: tm.rows, tops, pitch, off};
 }
-const RANKC = new Map();
-/* a cell left of the team names with a number printed in it, in every row (like the # column) */
-async function findRankCell(t){
-  const tm = tableModel(t, true);
-  if (tm.cols.some(c => roleOf(c.field) === 'rank')) return null;
-  const key = [t.id, t.image.ref, JSON.stringify(t.zones).length].join('|'); if (RANKC.has(key)) return RANKC.get(key);
-  let out = null;
-  try {
-    const img = await loadImage(t.image.ref), g = rowGeom(t); if (!img || !g) { RANKC.set(key, null); return null; }
-    const P = pixelsOf(img, 1400), {w, d, s} = P;
-    const rowZ = r => t.zones.filter(z => z.row === r);
-    const teamX = Math.min(...t.zones.filter(z => z.row > 0 && (z.type === 'teamName' || z.type === 'teamTag')).map(z => z.x).concat([Infinity]));
-    const leftX = Math.min(teamX, ...t.zones.filter(z => z.row > 0 && z.type === 'teamLogo').map(z => z.x));
-    if (!isFinite(leftX)) { RANKC.set(key, null); return null; }
-    const xmax = Math.round(leftX * s);
-    const segs = y => { const o = []; let x = 0; while (x < xmax) { const i0 = (y * w + x) * 4, ref = [d[i0], d[i0+1], d[i0+2]]; let xx = x + 1; for (; xx < xmax; xx++) if (cdist(d, (y * w + xx) * 4, ref) >= 30) break; o.push({x0: x, x1: xx - 1, c: ref}); x = xx; } return o; };
-    const cands = [];
-    g.tops.forEach(tp => {
-      const zs = rowZ(tp.r), top = Math.min(...zs.map(z => z.y)) * s, h = (Math.max(...zs.map(z => z.y + z.h)) * s) - top;
-      const a = segs(Math.round(top + h * .12)), b = segs(Math.round(top + h * .88));
-      a.forEach(sg => {
-        const n = sg.x1 - sg.x0 + 1; if (n < h * .5 || n > h * 3) return;
-        if (!b.some(o => Math.abs(o.x0 - sg.x0) <= 3 && Math.abs(o.x1 - sg.x1) <= 3 && cdist([o.c[0], o.c[1], o.c[2]], 0, sg.c) < 40)) return;
-        // something printed inside it at mid height
-        const ym = Math.round(top + h * .5); let ink = 0; for (let x = sg.x0 + 2; x < sg.x1 - 1; x++) if (cdist(d, (ym * w + x) * 4, sg.c) > 90) ink++;
-        if (ink < 2) return;
-        cands.push({r: tp.r, x0: sg.x0, x1: sg.x1, cx: (sg.x0 + sg.x1) / 2});
-      });
-    });
-    const groups = [];
-    cands.forEach(c => { const gg = groups.find(gg => Math.abs(gg.cx - c.cx) <= w * .02); if (gg) { if (!gg.items.some(i => i.r === c.r)) gg.items.push(c); } else groups.push({cx: c.cx, items: [c]}); });
-    const best = groups.filter(gg => gg.items.length >= Math.max(2, Math.ceil(g.rows.length * .6))).sort((p, q) => p.cx - q.cx)[0];
-    if (best) {
-      const med = a => { const v = [...a].sort((p, q) => p - q); return v[v.length >> 1]; };
-      const x0 = med(best.items.map(i => i.x0)) / s, x1 = med(best.items.map(i => i.x1)) / s, pad = (x1 - x0) * .08;
-      const ref = t.zones.find(z => z.row > 0 && z.type === 'teamName') || t.zones.find(z => z.row > 0) || {};
-      out = {x: Math.round(x0 + pad), w: Math.round(x1 - x0 - pad * 2), style: {font: ref.font, weight: ref.weight, color: ref.color, ls: 0, sw: 0, sc: '#000000', fit: true, upper: false, valign: 'middle', align: 'center'}};
-    }
-  } catch (e) { out = null; }
-  RANKC.set(key, out); return out;
-}
-/* adds number spots over the printed rank cell of every row, so long graphics and pages count on */
-function withRankSpots(vt, cell, rows){
-  const zones = vt.zones.slice();
-  for (const r of rows) { const zs = vt.zones.filter(z => z.row === r); if (!zs.length) continue; const y = Math.min(...zs.map(z => z.y)), h = Math.max(...zs.map(z => z.y + z.h)) - y;
-    zones.push({...cell.style, id: 'rank-auto-' + r, type: 'text', field: 'Rank', row: r, x: cell.x, y, w: cell.w, h, size: Math.round(h * .5), sample: ''}); }
-  return {...vt, zones};
-}
 async function graphicsFor(t, data){
-  const d = rankedFill(t, data), tm = tableModel(t), L = t.layout;
-  const used = tm.rows.filter(r => tm.cols.some(c => d.values[c.field + '|' + r] || d.teams[c.field + '|' + r])).length;
-  if (!tm.base || tm.rows.length === tm.base || !L) return [{t, data: d}];
-  const n = Math.max(tm.base, used);
-  const cell = n > tm.base ? await findRankCell(t) : null;
-  if (cell) tm.rows.forEach((r, i) => { if (i < used) d.values['Rank|' + r] = String(i + 1); });
-  const R = tm.base, pages = Math.max(1, Math.ceil(n / R)), out = [];
-  for (let p = 0; p < pages; p++) {
-    const pd = {values: {}, teams: {}, images: {}};
-    for (const [k, v] of Object.entries(d.values)) { const [f, r] = splitKey(k); if (!r) pd.values[k] = v; else if (r > p * R && r <= (p + 1) * R) pd.values[f + '|' + (r - p * R)] = v; }
-    for (const [k, v] of Object.entries(d.teams)) { const [f, r] = splitKey(k); if (!r) pd.teams[k] = v; else if (r > p * R && r <= (p + 1) * R) pd.teams[f + '|' + (r - p * R)] = v; }
-    for (const [k, v] of Object.entries(d.images)) { const [f, r] = splitKey(k); if (!r) pd.images[k] = v; else if (r > p * R && r <= (p + 1) * R) pd.images[f + '|' + (r - p * R)] = v; }
-    out.push({t: cell ? withRankSpots(t, cell, tableModel(t, true).rows) : t, data: pd});
-  }
-  return out;
+  const d = rankedFill(t, data), ps = pagesOf(t);
+  return ps.length > 1 ? ps.map(p => ({t: p, data: d})) : [{t, data: d}];
 }
 const splitKey = k => { const i = k.lastIndexOf('|'); const r = +k.slice(i + 1); return [k.slice(0, i), Number.isFinite(r) ? r : 0]; };
-S.page = 0;
 const previewFill = throttle(async () => {
   if (!(S.cur && S.view === 'fill')) return null;
-  const gs = await graphicsFor(S.cur, S.fill); if (S.page >= gs.length) S.page = gs.length - 1; if (S.page < 0) S.page = 0;
-  const pg = $('#fill-pages'); if (pg) { pg.classList.toggle('hidden', gs.length < 2); $('#pg-label').textContent = `Page ${S.page + 1} of ${gs.length}`; }
+  const gs = await graphicsFor(S.cur, S.fill), more = $('#fill-more');
   $('#dl-btn').textContent = gs.length > 1 ? `Download ${gs.length} PNGs` : 'Download PNG';
-  const g = gs[S.page]; $('#fill-size').textContent = `${g.t.image.w}×${g.t.image.h}px`;
-  return renderTo($('#fill-canvas'), g.t, g.data, {});
+  $('#fill-size').textContent = gs.length > 1 ? `${gs.length} pages · ${gs[0].t.image.w}×${gs[0].t.image.h}px` : `${gs[0].t.image.w}×${gs[0].t.image.h}px`;
+  $('#pg1-label').classList.toggle('hidden', gs.length < 2);
+  while (more.children.length > gs.length - 1) more.lastElementChild.remove();
+  while (more.children.length < gs.length - 1) { const n = more.children.length + 2; const w = document.createElement('div'); w.innerHTML = `<p class="lab pglab">Page ${n}</p><div class="pv"><canvas></canvas></div>`; more.appendChild(w); }
+  const jobs = [renderTo($('#fill-canvas'), gs[0].t, gs[0].data, {})];
+  gs.slice(1).forEach((g, i) => jobs.push(renderTo(more.children[i].querySelector('canvas'), g.t, g.data, {})));
+  return Promise.all(jobs);
 }, 50);
 function openFill(t){
-  S.cur = t; S.fill = loadFill(t); S.batch = []; applyCalc(t, S.fill);
+  t = rootOf(t); S.cur = t; S.fill = loadFill(t); S.batch = []; applyCalc(t, S.fill);
   showView('fill');
   $('#fill-title').value = t.name;
   $('#fill-size').textContent = `${t.image.w}×${t.image.h}px`;
@@ -1184,7 +1214,6 @@ function wireFill(){
     const tk = e.target.dataset.team, ik = e.target.dataset.img;
     if (tk != null) { const v = e.target.value; if (!v) delete S.fill.teams[tk]; else if (v !== '__custom') { const t = teamById(v); S.fill.teams[tk] = {id: v, name: t ? t.name : ''}; } onFillChange(); }
     if (e.target.id === 'imp-file') { importFiles(e.target.files); e.target.value = ''; return; }
-    if (e.target.id === 'lay-mode') { const t = S.cur, tm = tableModel(t, true), v = e.target.value; if (v === 'top') { const n = tm.rows.length; t.layout = {mode: 'top', n}; Object.keys(S.fill.values).forEach(k => { if (splitKey(k)[1] > n) delete S.fill.values[k]; }); Object.keys(S.fill.teams).forEach(k => { if (splitKey(k)[1] > n) delete S.fill.teams[k]; }); } else t.layout = {...t.layout, mode: v}; S.page = 0; queueSave(t); renderFillForm(); previewFill(); return; }
     if (e.target.id === 'ff-toggle') { const t = S.cur; const old = (t.scoring && t.scoring.ff === false) ? t.scoring : {}; t.scoring = {...old, ff: e.target.checked}; if (!e.target.checked && !old.pts) { t.scoring.pts = FF_OFFICIAL.pts.slice(); t.scoring.perKill = 1; } queueSave(t); renderFillForm(); toast(e.target.checked ? 'FF official scoring is on.' : 'FF official scoring is off. Set your own points below.'); return; }
     if (e.target.id === 'ff-pts' || e.target.id === 'ff-kill') { const t = S.cur; const pts = $('#ff-pts').value.split(/[,\s;]+/).map(num).filter(v => v != null); t.scoring = {ff: false, preset: 'custom', pts: pts.length ? pts : FF_OFFICIAL.pts.slice(), perKill: num($('#ff-kill').value) ?? 1}; queueSave(t); toast('Your points are saved for this template.'); return; }
     if (e.target.id === 'sc-preset') { const p = PLACEMENT_PRESETS.find(x => x.id === e.target.value); if (p) $('#sc-pts').value = p.pts.join(', '); return; }
@@ -1753,7 +1782,7 @@ async function applyDetect(){
   const keyed = names.map((nm, i) => use[i] ? nm + '|' + types[i] : null).filter(Boolean);
   if (new Set(keyed.map(norm)).size !== keyed.length) { toast('Give each column a different name.', true); return; }
   const font = $('#dt-font').value, weight = +$('#dt-weight').value, color = /^#[0-9a-f]{6}$/i.test($('#dt-colorhex').value) ? $('#dt-colorhex').value : $('#dt-color').value, pct = clamp(+$('#dt-size').value || 48, 20, 95) / 100;
-  const nm = ($('#dt-name').value || '').trim(); if (nm) { t.name = nm; $('#ed-name').value = nm; }
+  const nm = ($('#dt-name').value || '').trim(); if (nm && !t.parent) { t.name = nm; $('#ed-name').value = nm; pagesOf(t).slice(1).forEach(p => { p.name = nm + ' · page ' + p.pageNo; queueSave(p); }); }
   const btn = $('[data-act="detect-apply"]'); btn.disabled = true;
   try {
     if ($('#dt-clean').checked && found.dashes.length) {
@@ -1766,16 +1795,9 @@ async function applyDetect(){
       if (t.example) { const ref = 'tmp:' + uid(); MEM.set(ref, cv); t.image = {ref, w: found.W, h: found.H}; }
       else { const ref = await S.store.putBlob(blob, 'image/png'); const old = t.image.ref; t.image = {ref, w: found.W, h: found.H}; if (old && old !== t.originalImage.ref && !S.templates.some(o => o !== t && o.image.ref === old)) S.store.delBlob(old); }
     }
-    const base = {font, weight, fit: true, color, valign: 'middle', ls: 0, sw: 0, sc: '#000000'};
-    const zones = [];
-    const sides = found.side2 ? [0, found.side2.dx] : [0], R = found.rows.length;
-    sides.forEach((dx, si) => found.rows.forEach((r, ri) => found.cols.forEach((c, ci) => {
-      if (!use[ci]) return;
-      zones.push({...base, id: uid(), type: types[ci], field: names[ci], row: si * R + ri + 1, x: c.x + dx, y: c.dy != null ? r.top + c.dy : r.top, w: c.w, h: c.h || r.h, size: Math.round(r.h * pct), align: isTeamType(types[ci]) ? 'left' : (c.align || 'center'), upper: types[ci] !== 'text', sample: types[ci] === 'text' ? String((ri * 7 + ci * 3) % 40 + 1) : ''});
-    })));
-    const seen = {};
-    spots.forEach(sp => { let f = sp.name; if (isTeamType(sp.type)) f = sp.name; else { seen[f] = (seen[f] || 0) + 1; if (seen[f] > 1) f += ' ' + seen[f]; }
-      zones.push({...base, id: uid(), type: sp.type, field: f, row: 0, x: sp.x, y: sp.y, w: sp.w, h: sp.h, size: Math.round(sp.h * .75), align: 'center', upper: sp.type !== 'text', sample: ''}); });
+    const st = {font, weight, color, pct, clean: $('#dt-clean').checked, cols: found.cols.map((c, i) => use[i] ? {name: names[i], type: types[i]} : null).filter(Boolean)};
+    const zones = buildZones(found, use, names, types, st, spots, rowOffsetFor(t));
+    rootOf(t).detectSettings = st; if (rootOf(t) !== t) queueSave(rootOf(t));
     t.zones = zones;
     t.printedRank = found.cols.some((c, i) => c.fixed && !use[i] && i < found.cols.findIndex((c2, j) => use[j] && types[j] === 'teamName'));
     const total = usedNames.find(x => roleOf(x) === 'total');
@@ -1783,7 +1805,9 @@ async function applyDetect(){
     await doSave(t);
     $('#detect-modal').classList.add('hidden'); DT = null;
     S.sel = null; S.fit = true; layoutStage(); renderBoxes(); renderPanel(); renderChips(); previewEditor(); updateRestoreBtn();
-    toast(`${zones.length} spots placed. Tap any spot to fine-tune it, or go to Fill in results.`);
+    renderEdPages();
+    toast(`${zones.length} spots placed${t.parent ? `, rows numbered from ${rowOffsetFor(t) + 1}` : ''}. Tap any spot to fine-tune it${DQ.length ? '. Setting up the next page…' : ', or go to Fill in results.'}`);
+    if (DQ.length) setTimeout(nextQueued, 600);
   } catch (e) { toast('Could not set up the spots: ' + errMsg(e), true); }
   finally { btn.disabled = false; }
 }
@@ -2180,29 +2204,20 @@ function applyImport(decided){
   const more = st.teams.length > R ? ` Top ${R} of ${st.teams.length} teams shown.` : '';
   const L = t.layout, pages = L && L.mode !== 'top' ? Math.ceil(R / tm.base) : 1;
   const how = pages > 1 ? ` All teams are on ${pages} pages.` : '';
-  S.page = 0;
   toast(`Filled ${Math.min(st.teams.length, R)} rows.${how || (tieNote ? more + tieNote : more)} Check the preview, then download.${calcNote}`);
 }
 function askLayout(t, n, base){
-  const prev = (t.layout && t.layout.mode) === 'top' ? 'top' : t.layout ? 'pages' : 'top';
-  const pages = Math.ceil(n / base);
-  const bigger = S.templates.filter(x => x !== t && !x.example).map(x => ({x, rows: tableModel(x, true).rows.length})).filter(o => o.rows > base).sort((a, b) => b.rows - a.rows);
-  $('#lay-summary').textContent = `Your results have ${n} teams, but this design has ${base} rows.`;
+  const bigger = allTemplates().filter(x => x !== t && !x.example).map(x => ({x, rows: tableModel(x, true).rows.length, pages: pagesOf(x).length})).filter(o => o.rows > base).sort((a, b) => b.rows - a.rows);
+  const here = pagesOf(t).length;
+  $('#lay-summary').textContent = `Your results have ${n} teams, but this design has ${base} rows${here > 1 ? ` over ${here} pages` : ''}.`;
   $('#lay-opts').innerHTML = `
-    <p class="lab">${base} teams</p>
-    <label class="layopt"><input type="radio" name="lay" value="top" ${prev === 'top' ? 'checked' : ''}><span><b>Top ${base} on this design</b><small>If teams are level for the last spot, the tie-breakers decide and only the team ahead goes in.</small></span></label>
-    <p class="lab" style="margin-top:6px">24+ teams</p>
-    <label class="layopt"><input type="radio" name="lay" value="pages" ${prev === 'pages' ? 'checked' : ''}><span><b>All ${n} on ${pages} pages</b><small>This design repeated: teams 1–${base} on page 1, ${base + 1}–${Math.min(n, base * 2)} on page 2${pages > 2 ? ', and so on' : ''}.</small></span></label>
-    ${bigger.map(o => `<label class="layopt"><input type="radio" name="lay" value="tpl:${esc(o.x.id)}"><span><b>${esc(o.x.name)}</b><small>Your ${o.rows}-team design${o.rows >= n ? `, fits all ${n}` : `: top ${o.rows}, or pages after that`}.</small></span></label>`).join('')}
-    ${bigger.length ? '' : '<p class="help">Have a design made for more teams, like two tables of 12 side by side? Upload it as a template and it will show up here.</p>'}`;
-  $('#lay-rank').classList.add('hidden');
-  if (!tableModel(t, true).cols.some(c => roleOf(c.field) === 'rank')) findRankCell(t).then(c => { $('#lay-rank').classList.toggle('hidden', !!c || !needsRankNote(t)); });
+    <label class="layopt"><input type="radio" name="lay" value="top" checked><span><b>Top ${base} on this design</b><small>If teams are level for the last spot, the tie-breakers decide and only the team ahead goes in.</small></span></label>
+    ${bigger.map(o => `<label class="layopt"><input type="radio" name="lay" value="tpl:${esc(o.x.id)}"><span><b>${esc(o.x.name)}</b><small>${o.pages > 1 ? `${o.pages} pages, ` : ''}${o.rows} teams${o.rows >= n ? `: fits all ${n}` : `: top ${o.rows}`}</small></span></label>`).join('')}
+    <p class="help" style="margin-top:4px">${bigger.length ? 'Or u' : 'U'}pload a design made for more teams: one with two tables of 12, or several pages picked together.</p>`;
   LAY = {n, base};
   $('#layout-modal').classList.remove('hidden');
 }
 let LAY = null;
-// the note only matters when the design looks like it has printed rank numbers we could not find
-function needsRankNote(t){ return !!t.printedRank; }
 function layoutChosen(){
   const t = S.cur; if (!t || !LAY) return;
   const v = $('#lay-opts input[name="lay"]:checked').value;
@@ -2213,15 +2228,10 @@ function layoutChosen(){
     showImport(im.st, im.grids); applyImport(); if ($('#imp-result')) $('#imp-result').innerHTML = '';
     return;
   }
-  t.layout = v === 'top' ? {mode: 'top', n: LAY.base} : {mode: 'pages', n: LAY.n};
+  t.layout = {mode: 'top', n: LAY.base};
   applyImport(true);
 }
-function layoutCard(t){
-  const L = t.layout, tm = tableModel(t); if (!L || L.mode === 'top' || tm.rows.length <= tm.base) return '';
-  const pages = Math.ceil(tm.rows.length / tm.base);
-  return `<div class="ffrow"><div class="ff-lab">All ${tm.rows.length} teams<small>${pages} pages of ${tm.base}</small></div>
-    <select id="lay-mode" style="width:auto" aria-label="Teams shown"><option value="pages" selected>All on pages</option><option value="top">Top ${tm.base} only</option></select></div>`;
-}
+function layoutCard(){ return ''; }
 function scoringCard(t){
   const sc = scoringOf(t);
   return `<details><summary class="lab" style="cursor:pointer">Scoring rules for match-by-match results · ${esc((PLACEMENT_PRESETS.find(p => p.id === sc.preset) || {label: 'Custom'}).label)}, ${sc.perKill} per kill</summary>
@@ -2399,10 +2409,11 @@ async function uploadFont(files){
 async function act(a, el){
   const id = el && el.dataset.id;
   switch (a) {
-    case 'back': S.cur = null; location.hash = '#templates'; showView('templates'); break;
+    case 'back': DQ = []; S.cur = null; location.hash = '#templates'; showView('templates'); break;
     case 'open-fill': { const t = tplById(id); if (t) openFill(t); break; }
     case 'open-edit': { const t = tplById(id); if (t) openEditor(t); break; }
-    case 'to-fill': if (S.cur) openFill(S.cur); break;
+    case 'to-fill': if (S.cur) openFill(rootOf(S.cur)); break;
+    case 'ed-page': { const t = tplById(id); if (t) openEditor(t); break; }
     case 'to-edit': if (S.cur) openEditor(S.cur); break;
     case 'rename-tpl': { const t = S.templates.find(x => x.id === id); const box = $('#tn-' + CSS.escape(id)); if (!t || !box) break;
       box.innerHTML = `<input id="tn-in-${esc(id)}" value="${esc(t.name)}" aria-label="Template name" style="text-transform:none;font-family:var(--body);font-weight:600;font-size:1rem">`;
@@ -2411,8 +2422,16 @@ async function act(a, el){
       inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') { inp.value = t.name; inp.blur(); } });
       inp.addEventListener('blur', done, {once: true}); break; }
     case 'dup-tpl': { const o = tplById(id); if (!o) break; const t = JSON.parse(JSON.stringify(o)); t.id = uid(); t.name = o.name + ' copy'; t.createdAt = t.updatedAt = Date.now(); t.zones.forEach(z => z.id = uid());
-      try { await S.store.put('templates', t.id, t); S.templates.unshift(t); renderTemplates(); toast('Duplicated. Use Replace design image to swap in another design with the same spots.'); } catch (e) { toast('Could not duplicate: ' + errMsg(e), true); } break; }
+      try { await S.store.put('templates', t.id, t); S.templates.unshift(t);
+        for (const c of S.templates.filter(x => x.parent === o.id)) { const k = JSON.parse(JSON.stringify(c)); k.id = uid(); k.parent = t.id; k.name = t.name + ' · page ' + k.pageNo; k.zones.forEach(z => z.id = uid()); await S.store.put('templates', k.id, k); S.templates.push(k); } renderTemplates(); toast('Duplicated. Use Replace design image to swap in another design with the same spots.'); } catch (e) { toast('Could not duplicate: ' + errMsg(e), true); } break; }
+    case 'del-page': { const t = S.templates.find(x => x.id === id); if (!t || !t.parent) break; const root = rootOf(t);
+      try { await S.store.del('templates', id); S.templates = S.templates.filter(x => x !== t); if (!S.templates.some(o => o.image.ref === t.image.ref)) S.store.delBlob(t.image.ref);
+        // renumber the pages after it so rows stay in order
+        const rest = pagesOf(root); let off = 0;
+        for (const p of rest) { const rows = [...new Set(p.zones.filter(z => z.row).map(z => z.row))].sort((a, b) => a - b); const map = new Map(rows.map((r, i) => [r, off + i + 1])); p.zones.forEach(z => { if (z.row) z.row = map.get(z.row); }); off += rows.length; if (p !== root) { p.pageNo = rest.indexOf(p) + 1; p.name = root.name + ' · page ' + p.pageNo; } queueSave(p); }
+        openEditor(root); toast('Page removed.'); } catch (e) { toast('Could not remove the page: ' + errMsg(e), true); } break; }
     case 'del-tpl': { const t = S.templates.find(x => x.id === id); if (!t) break;
+      for (const c of S.templates.filter(x => x.parent === t.id)) { try { await S.store.del('templates', c.id); } catch (e) {} S.templates = S.templates.filter(x => x !== c); }
       try { await S.store.del('templates', id); S.templates = S.templates.filter(x => x !== t); if (!S.templates.some(o => o.image.ref === t.image.ref)) S.store.delBlob(t.image.ref); try { localStorage.removeItem(fillKey(t)); } catch (e) {} renderTemplates(); toast('Template deleted.'); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
     case 'draw': S.drawMode = !S.drawMode; updateDrawBtn(); if (S.drawMode) toast('Drag over the design to draw a spot, or tap to drop one.'); break;
     case 'zoom-in': S.fit = false; S.scale = Math.min(3, S.scale * 1.4); layoutStage(); break;
@@ -2446,8 +2465,6 @@ async function act(a, el){
     case 'team-del': { const t = S.teams.find(x => x.id === id); if (!t) break; try { await S.store.del('teams', id); S.teams = S.teams.filter(x => x !== t); if (t.logo) S.store.delBlob(t.logo); if (S.editTeam === t) resetTeamForm(); renderTeams(); toast(`Deleted ${t.name}.`); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
     case 'font-del': { const f = S.fonts.find(x => x.id === id); if (!f) break; try { await S.store.del('fonts', id); S.fonts = S.fonts.filter(x => x !== f); S.store.delBlob(f.ref); renderFonts(); toast('Font deleted. Spots using it fall back to another font.'); } catch (e) { toast('Could not delete: ' + errMsg(e), true); } break; }
     case 'ff-help': ffHelp(); break;
-    case 'pg-prev': S.page--; previewFill(); break;
-    case 'pg-next': S.page++; previewFill(); break;
     case 'lay-go': layoutChosen(); break;
     case 'lay-cancel': $('#layout-modal').classList.add('hidden'); break;
     case 'modal-close': $('#modal').classList.add('hidden'); $('#modal-body').innerHTML = ''; break;
@@ -2470,7 +2487,7 @@ $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') act('m
 /* ---------- init ---------- */
 (async function init(){
   wireStage(); wireFill();
-  $('#tpl-upload').addEventListener('change', e => { uploadTemplate(e.target.files[0]); e.target.value = ''; });
+  $('#tpl-upload').addEventListener('change', e => { uploadTemplate(e.target.files); e.target.value = ''; });
   $('#replace-img').addEventListener('change', e => { replaceImage(e.target.files[0]); e.target.value = ''; });
   $('#team-form').addEventListener('submit', saveTeam);
   $('#tm-logo').addEventListener('change', e => { const f = e.target.files[0]; $('#tm-preview').innerHTML = f ? `<img alt="" src="${URL.createObjectURL(f)}">` : 'No logo'; });
