@@ -2145,6 +2145,52 @@ function inkCrop(src, x, y, w, h, keep, outH){
   cx.drawImage(mc, x0, y0, cw, ch, 8, Math.round((outH + 16 - ch * k) / 2), cw * k, ch * k);
   c.aspect = aspect; return c;
 }
+/* the yellow kill number in a box: each digit as its own blob, described by a small ink grid + its shape */
+function digitBlobs(src, x, y, w, h){
+  x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y)); w = Math.min(src.width - x, Math.round(w)); h = Math.min(src.height - y, Math.round(h));
+  if (w < 3 || h < 3) return [];
+  const d = src.getContext('2d', {willReadFrequently: true}).getImageData(x, y, w, h).data, N = w * h;
+  const L = new Float32Array(N); for (let i = 0; i < N; i++) L[i] = .299 * d[i*4] + .587 * d[i*4+1] + .114 * d[i*4+2];
+  const bg = [...L].sort((p, q) => p - q)[Math.floor(N * .45)];
+  const m = new Uint8Array(N); for (let i = 0; i < N; i++) if (isYellow(d[i*4], d[i*4+1], d[i*4+2], L[i], bg)) m[i] = 1;
+  // connected blobs (8-neighbour)
+  const seen = new Int32Array(N).fill(-1), blobs = [];
+  for (let i = 0; i < N; i++) {
+    if (!m[i] || seen[i] >= 0) continue;
+    const st = [i]; seen[i] = blobs.length; let x0 = w, x1 = 0, y0 = h, y1 = 0, n = 0; const px = [];
+    while (st.length) { const p = st.pop(), px_ = p % w, py = (p - px_) / w; px.push(p); n++; if (px_ < x0) x0 = px_; if (px_ > x1) x1 = px_; if (py < y0) y0 = py; if (py > y1) y1 = py;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const qx = px_ + dx, qy = py + dy; if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue; const q = qy * w + qx; if (m[q] && seen[q] < 0) { seen[q] = blobs.length; st.push(q); } } }
+    blobs.push({x0, x1, y0, y1, n, px});
+  }
+  const big = blobs.filter(b => b.y1 - b.y0 + 1 >= h * .28 && b.n >= 6);
+  if (!big.length) return [];
+  const H = Math.max(...big.map(b => b.y1 - b.y0 + 1));
+  // merge pieces that overlap horizontally (a broken stroke), keep digit-sized blobs
+  big.sort((a, b) => a.x0 - b.x0);
+  const merged = [];
+  for (const b of big) { const l = merged[merged.length - 1]; if (l && b.x0 <= l.x1 - 1) { l.x0 = Math.min(l.x0, b.x0); l.x1 = Math.max(l.x1, b.x1); l.y0 = Math.min(l.y0, b.y0); l.y1 = Math.max(l.y1, b.y1); l.px = l.px.concat(b.px); l.n += b.n; } else merged.push({...b}); }
+  return merged.filter(b => b.y1 - b.y0 + 1 >= H * .6).map(b => {
+    const bw = b.x1 - b.x0 + 1, bh = b.y1 - b.y0 + 1, GW = 8, GH = 12, g = new Float32Array(GW * GH), cnt = new Float32Array(GW * GH);
+    const inBlob = new Uint8Array(N); b.px.forEach(p => { inBlob[p] = 1; });
+    for (let yy = b.y0; yy <= b.y1; yy++) for (let xx = b.x0; xx <= b.x1; xx++) { const gx = Math.min(GW - 1, Math.floor((xx - b.x0) * GW / bw)), gy = Math.min(GH - 1, Math.floor((yy - b.y0) * GH / bh)); cnt[gy * GW + gx]++; if (inBlob[yy * w + xx]) g[gy * GW + gx]++; }
+    for (let k = 0; k < g.length; k++) g[k] = cnt[k] ? g[k] / cnt[k] : 0;
+    return {grid: Array.from(g, v => Math.round(v * 100) / 100), aspect: Math.round(bw / bh * 100) / 100, x: x + b.x0, h: bh};
+  });
+}
+/* Free Fire kill-number samples (0–9), cut from real result screens: digit, width/height, 8×12 ink grid */
+const FF_DIGITS_RAW = '00.535rwvvuk2pzkacuzhyq200fvwyk0009uxyj0006uxyi0007twyi0006uwzk0007uxyk0008uxxs200hwumzshlxyg4pvvusf3;00.420izzzziiizzziizzzzi00000zz000000zz000000zz000000zz000000zz000000zz000000zz00000iizzi9iiz0zzzzzzz;00.579zi00zz0zq000zz0zi000iz0zi000zzizi000zzzzi000iz0zi000iz0zi000zz0zi000zz0zq009zz0izzzzzi00izz0000;00.57izzzzzi0zziiizz0zq000zz0zi000zzzzi000zz0zi000zz0zi000zz0zi000zzzzi000zzzzq000zz0qz009zz00z00izi0;00.460zzzzzzzqzi000izzz00000zzz00000zzz00000zz000000zq000000zzi00000zzz00000zqz9000izizziiqzz0iiziiii;00.566nzzzni0qzqiizz0zz000zz0zz000iz0zz000iz0zz000iz0zz000iz0zz000izizz000izizz000qz0qzzzzzz00qzzzq90;00.460iqzzqiiizzzizzzzzi000izzz00000zzz00000zzz00000zzz00000zzz00000zzz00000zzz90000zqzq009zz9zzzzzzz;00.570iiiqz90zq000zz0zi000zzzzi000zzzzi000zzzzi000zzzzi000zzzzi000zzzzi000zzizq000zz0qzzzzzq00zzzzzi0;00.549qz00090izi90zziiz0000qzqz0000izqz0000zzzz0000qzqz0000zzzz0000iziz0000iziz0000zz9zziqzzi0ii09z90;00.500izzzzq0qzziizzizz9000zzzz0000zzzz0000qzzz0000izzz0000zzzz0000zzzz0000zzzz0000zzqz9000zz9ii000i0;00.579zzi9iz0iz000izzqz0000qzzz0000zzqz0000zzqz0000zzzz0000zzzz0000zziz0000zziz000izz0izzzzzi000zzz00;00.549izzzz90qzziqzzizz000zzzzi000zzzzi000zzzzi000zzzzi000zzzzi000zzzzi000zzzzq000zzzqzziizzz9zzzzzq0;00.529zzzzzq0zz0000zzz00000zzz00000izz00000izz00000zzz00000zzz00000izz00000qzzz0000zzqzqiizzi0zzzzz00;10.289oniynf0vyrizrs03emizrs0006hzrs0005gzrw0005hzrr0005hzrr0015gzrs0005gzrs0004hyrr0004exqo00047qkc0;10.28iz0zz000zz0zz000zz0zz000000zz000000zz000000zz000000zz0i0000zz0z0000zz0i0000zz000000zz000000zz000;10.220000i0z0z0z0z0z000z0z0z00000z0z000z0z0z000z0z0z000z0z0z000z0z0z000z0z0z00000z0z00000z0z0000000z0;10.30izz0zz00zzz0zz0000z0zz0000z0zz0000z0zzz000z0zzz000z0zz0000z0zz0000z0zz0000z0zz0000z0zz0000z0z000;10.28ii0zz0z0zz0zz0z00i0zz0z0000zz0z0000zz0z0000zz0z0000zz0z0000zz0z0000zz0z0000zz0z0000ii0z0000000z0;10.300izzzz00izzzzz0000izzz00000zzz00000zzzi0000zzz00000zzz00000zzz00000zzz00000zzz00000izz000000z000;10.30iiz0zzi0zzz0zz0000z0zz000000zz000000zzz00000zz000000zz000000zz000000zz000000zz000000zz000000zz00;10.280i0zz0z0zz0zz0z0iz0zz0z00000z0z00000z0z00000z0z00000z0z00000z0z00000z0z00000z0z00000z0z00000z0z0;10.32izz0zi00izz0zzz00000zzz00000zzz00000zzz00000zzz00000zzz00000zzz00000zzz000000zz000000zz0000000z0;10.290iz0zi00zzz0zzz00zz0zzz000z0zzz000z0zzz000z0zzz000z0zzz000z0zzz000z0zzz000z0zzi000z0zz0000z0z000;10.330izzzz00izzzzzz00iizzzz0000zzzz0000zzzz0000zzzz0000zzz00000zzz00000zzzz0000zzzz0000zzzi0000zz000;10.29izz0zz00zzz0zzz00zz0zzz000z0zzz000z0zzz000z0zz0000z0zz0000z0zz0000z0zz0000z0zzz000z0zz0000z00000;10.320iizzi00izzzzzz00iizzzz0000zzzz0000zzzz0000zzzz0000zzzz0000zzzz0000zzz00000zzz00000zzz000000z000;20.541blquvh20468iwyg01101lxw01100jww11007svj14cjsvn47sxqg951mxi32221rs312321vu403330vyvkhd50jwvuokc3;20.5500z0zz000zz0zz000zz0z0000zz00000zz000000zz000000zzz00000zzz00000zzz0zz00zzz0zzz00zz0zz0000000000;20.79qzzzi900izzzzzz00000zzz000000zzz00000izz00000izz00000qzz00000zz000000zz00000zzz00000zz00000z0000;20.570izzzzii0000zzzz00000zzz00000zz000000zz000000zz000000zz00000zzz000zzzzzzz000zzz0zzzz0000zz000000;20.420izzqiii0iizzzzz000000iz0000000z0000000z00000izz0izzzzziizzz9000zzi00000zz000000zzzi0000zzzzzzzz;20.550000izzi00000izz000000zz00000zzz009izzziizzzzz00qzzi9000zz900000zz000000zzi00000zzzzzi00izzzz000;20.4600zzzqi000izzzzz000009zz000000z0000009z0000iiqi09izzii00zzq00000zz000000zz000000zzq00000izqi0000;20.52000iqzz000009izi000000zz000000zz0000izz000izzzq0izzi9000zz900000z0000000zz000000zzzi0000izz00000;20.42000iziii000iiizz0000000z0000000z000000iz0000izzz0izzzzii9zzi0000qzi00000zz000000zzziiiiiqzzzzzzz;20.520tzzzzn00000izzz00000zzz00000zzz0000qzzz09zzzzq0izzq9000zzi00000zz000000zzi00000zzzzzzz0izzzzzq0;20.540qzzii9009iizzz000000zzz000000zz00000izz0000qzz00izzzi90izzi0000iz000000iz000000qzi00000qzzzzzi0;20.54000iqi900000izz000000zzz00000zzz00009i90000iz0000qzqi000izi00000iq000000zq000000zzzii0009zzz0000;20.500zzzzzi0000iizzz000000zz000000zz00000izz000iqzzz0izzzi90izi00000zz900000zz000000zzqiii00qzzzzzz0;30.45gryyvtg1489gtzzc00005wzt00003uzp026bnzz39rwzzzz23aektyza00004rzv00002qzz0002hyzm9gmvzzn0gouwtb10;30.39iizzii00iiizzzz00000zzzz0000zzzz000izzz00izzzzz0iizzzzz00000zzzz0000zzzz0000zzzz9iizzzi000zzz000;30.390izzzzi000iizzz000000zz000000zz09iiizzz0qzzzzzz000iizzzi00000zzz00000zzz000izzz000iizzi0000z0000;30.39izzzzzi00000zzzz00000zzz00000zzz000izzzz0zzzzzzz000izzzz00000zzz00000zzz0000zzzz00zzzzi0000zz000;30.460iqzii000iiizzz000000zz000000iz000000zz000qzzzz000iizzz000000qz000000izz00000qzi009izzz0qzzzz900;30.39zzzzzzi09iizzzz00000izzz00000zzz00iizzz00zzzzzz00iiizzz00000izzz00000zzz000iizzi00zzzzi00000z000;30.45zzzzzzi0000iqzz000009zzz00009zzi000iqzz0zzzzzzz0izzzzzz000009zzi00000zzz00009zzz00iizzz00zzzzz00;30.50qzzzzzi00000izzi00000izz00000izi0000izz000izzzz000iizzz000000qzz00000izz00000qzz000izzi000izzi00;30.4800zzzzi00000izz000000qzz00000qz000iizzz09zzzzzz00000izz000000izz00000izz0000izz0iizzzzi0zzzzz000;30.46izziii009iizzzz000000qzz00000izi00000zz00iizzzz00iqzzzz000000qzi00000izz00000qzz000izzz0izzzzq00;30.4600zzzzi000iizzz000000qz000000izz0000izz0009zzzz0009izzz000000qzz00000izz0000iqzi0iizzzi0qzzzz900;30.330izzzzzi0000zzzz00000zzz00000zzz000izzzz0zzzzzzz000izzzz00000zzz00000zzz0000izzziiizzzi0iizii000;30.46qzzzzqi0000izzz000000zz000000zz00000izz00izzzzz0009iizz000000qz000000izz0000izz09iqzzzi0qzzzi900;40.560003own2001lyzw200bxzzw213uyxzw21jykjyv26zp46xu2jz71cxu2wzreqxxjkyzzzzzy2559rzyf00004yv200001uk2;40.4000000izz0000izzz000zzzzz00izzzzz00zziiiz0zzz000zizzi000zzzi0000zzzzzzzzzzzzzzzzz00000iiz0000000z;40.48000izzi000izzzz000zzzzz09zzzzzz0iziiizz0zz000zz0zz00izz0zziizzzz0izzzzzz0000izz000000zz000000i00;40.570000qz00000qzzi000zzzzi000zzzzi00iz9qzi09z00izi0iz00izi0zzzizzz0qzzzzzzz0i0izzzi0000izi000000z00;40.610000qz90000zzzi0009zzzi000qzzzi009z0izi00zq09zi0iz009zi0zzqizzz0qzzzzzzi0000qzq000000zi000000zi0;40.610000qz90000izzi000izzzi000qzzzi009zzzzi00zq09zi0izi0izi0qzqiqzz0izzzzzzz0iiiqzz000009zi000000zi0;40.570009zzz0000qzzz000izzzz00izzzzz00zziizz0izi0izz0zzi0qzz0zzzzzzzzizzzzzzz0000izzi00009zz000000zz0;40.550000qzq0000zzzz000izzzz000qzzzz00zzi9zz0izi00zz0qzi00zz0zzi09zz0qzzzzzzz00iiqzzz00000zz000000zz0;40.590000qzq0000izzz0000qzzz000zzzzz009ziizz00zz00zz09z000zz0qzi0izziqzzzzzzz0iiiqzzz00000zz000000zz0;40.590009zzq0000izzz000izzzz000zqqzz00iziizz00zz0izz09z00izz0zz00qzziqzzzzzzz0000qzzi00009zz000000zi0;40.570000izi0000izzz0000qzzz000zzzzz00iziizz00zi90zz0iz009zz0qzziqzzi9zzzzzzz0000qzzi00000zz0000000i0;40.5400009iq0000izzz0000zzzz000izzzz00izqizz09zz00zz0izi0izz0qzziqzzi9zzzzzzz000iqzz000000zz000000zi0;40.540000qzq0000qzzz000izzzz000zzzzz00qzqqzz09zi0izz0zz00izz0zzzizzzizzzzzzzz0009zzzi0000izz000009zi0;50.56hwsuwp50wzvifa30wy700000yx100000yzi20000szywtnb05iigkww733330ewk23333gyv00035pzn27acqwu68hkmvj60;50.80qzzzzzi0zzzzz000zzz00000zzi00000zzi00000zzi00000zzz00000zzzz0000qzzzzzzi000zzzzz000000i0000000i0;50.549q000000zzz90000zq000000zi000000zzi00000qzzzii000iiiqzz000000zz000000zzz00000zz000iizzi00000qi00;50.59izzzzz90zzi00000zq000000zq000000zzi90000izzzzzi09iiiqzz000000zzz00000zzz00000zzz0000qzz00000zzi0;50.56intzzzc0zzziii90zz900000zz000000zz900000qzzzzz900iiiizz000000zz000000zzi00009zz09iiizzq0qzzzzq00;50.50qzzzzi00zzqi9000zz000000zz000000zzi00000zzzzzzq0000iizzz000000zz000000zz00000zzz00iiqzz09zzzzi90;50.549ziqzi00izzqii90iz000000qz000000qzi00000izzzqi900iiiqzz0000000zz000000qz000000zz0009izzi0009zi00;50.50qzzzzz00zzqiii00zz900000zz000000zzq00000zzzzzii09iiiizzi000000zz000000zz00000izz0iiiqzz0izzzzi90;50.50izzzzi00zzqi9000zz000000zz000000zz900000zzzzzi900iiiqzzi000000zz000000zz00000izz0000qzzi00qzzi90;50.56cttnzn60zzziii00zz900000zz000000zzqi0000qzzzzz900iiiqzz000000qz000000izz00009zz09iiizzq09qzzqi00;50.50izzzzz90zzqiii00zz900000zz000000zzq00000zzzzzii09iiiizzi000000zz000000zz00000izz0iiiqzzi9zzzzi90;60.63004wk00001nzd0000axw50002mzz8000azzzwwi0ozqoowz7std03iylwq500axuwq700axqnub01mzlizzswzxc3rxzxtb0;60.62000z000009zz00000qzq00000zzz0000izzzzzq0zziiiizzzi0000qzzi0000izzi0000izzi0000zzqzziizzz0zzzzzz0;60.61009z900000qz00000izz00000zzz9000izzzzzq0qziiiqz0zq0009z0zi0000zizi0000z0iq909qz09zzzzzq000izi000;60.6400izi00000qz00000izi00009zzzi000izzzzzq0zz000zz0zi0009z0zi0000zizi0000zizq000qz0qzzzzzq00zzzzi00;60.63000zz00000izq00000qzi00009zzi0009zzzzq90izzzzzziqzq00zzzqzi00izzzzi00izzizi00qzzizziqzzi9qzzzzq0;60.64009z900000qz00000izz00009zzz9000izzzzzq0izzzzzz0zq0009zizi0000zzzi0000ziqq000iz0izzzzzz00zzzzz00;60.63000qz00000izq00000zz000009zz00000zzzqi90izzzzzz0qzq09qzizz000izzqz000izziz900qzzizziqzzi0izzzqi0;60.63000qq00000izq00000zz900009zz00000zzzqz90izzzzzz0izq09qzzqz900izzqzi00izzizq00qzzizzzzzzi9zzzzz90;60.64009z900000qz00000izz00000zzz9000izzzzzq0zzi00zz0zq000iz0zi0009zizi0009ziqq000iz0izzizzz00zzzzz00;60.63000zz00000izq00000qzi00009zzi0009zzzzq90izzzzzziizq00qzzzzi00izzqzi00izzizq00qzzizzzzzzi0izzzzi0;70.46pxzzzzuga8diwzzv0008pzza000aqzv0000gwzg0008jzz30008vzc0006lzp6002guze0008nzp7000arvj20008njc0000;70.360izzzzzz0000zzzz0000zzzi000izzi0000zzz0000zzzz0000zzzi000izzz000izzz0000zzz00000zzi00000zz000000;70.50qzzzzzziiiqizzzz0000izzz0000izz00000izq00000zzi0000zzz00000zzi0000izz00000zzi00000zz900000zi0000;70.45qzzzzzz0iizzzzzz000zzzz0000zzzz0000zzzi0000zzz00000zzi000izz00000zzz00009zzi0000izz00000i0z00000;70.41qzzzzzzi000izzzz0000zzzi0000zzi0000zzz0000zzzz0000zzz00000zzz0000zzz0000izzi0000izi000000z000000;70.50qzzzzzii900iqzzi0000izz00000izz00000zzi00000zz00000iz00000izq00000zzi0000zzz90000zzz00000z0z0000;70.50zzzzzzzi0000qzzz0000izz00000qzz00000zzi0000zzz00000zz00000izz00000zzi00000zz90000zzz00000zz00000;70.45zzzzzzz0iizzzzzz000zzzz0000zzzz0000zzzi0000zzz00000zz0000izz00000zzz00009zzi0000izz00000izz00000;70.50qzzzzzqiiiiizzzz0000izzi0000izz00000qzq00000zz90000zzz00000zzz00009zz00000zzi00000zz900000zi0000;80.610qzzzz90izqiizz0iz000iz0iz000iz0iz909qz0izzzzzz0izqiizz0zi0009z0zi0000zzzi0000z0iziiiqz0izzzzzz0;90.669zzzzzq0mv949dzizi0000qizi0000qqvi0000qqmm000iziizqqqzzi0qzzzzz00004zzm00000zz400004z4000009q000;90.709zzzzzq0qq0009z0zi0000z0zi0000ziqi0000ziii000iz0iziiizz00izzzzz00000zzi00000zz000000z9000000z000;90.629zzzzzq0izi9iizzzi0000izzi0000izzi0000izqq000izzizzzzzzz0zzzzzz00009zzq00000zz900009z000000ii000';
+window.FF_DIGITS = FF_DIGITS_RAW.split(';').map(t => ({v: +t[0], a: +t.slice(1, 5), g: Array.from(t.slice(5), c => parseInt(c, 36) / 35)}));
+/* nearest digit by ink grid and shape, against samples cut from real Free Fire screens */
+function readDigit(blob){
+  if (!window.FF_DIGITS) return null;
+  let best = null, second = null;
+  for (const t of FF_DIGITS) {
+    let dd = 0; for (let k = 0; k < t.g.length; k++) { const e = blob.grid[k] - t.g[k]; dd += e * e; }
+    dd += 6 * (blob.aspect - t.a) ** 2;
+    if (!best || dd < best.d) { second = best; best = {v: t.v, d: dd}; } else if (!second || dd < second.d) second = {v: t.v, d: dd};
+  }
+  return best;
+}
 const isYellow = (r, g, b, l, bg) => r > 130 && g > 95 && b < g * .55 && r - b > 80 && l > bg + 40;
 const isLightText = (r, g, b, l, bg) => l > bg + 55 && l > 120 && !(b < g * .5 && r - b > 90);
 /* the clan tag most of a team's players share; conf = how many players carry it */
@@ -2221,7 +2267,10 @@ async function ffReadScreen(img, ocr){
     const thr = Math.min(H * .07, small * 1.2);
     for (const l of lines) { const b = blocks[blocks.length - 1]; if (b && l.cy - b.lines[b.lines.length - 1].cy < thr) b.lines.push(l); else blocks.push({lines: [l]}); }
     for (const b of blocks) {
-      place++; const tm = {place, players: []}; teams.push(tm);
+      place++; const tm = {place, players: [], half: hi}; teams.push(tm);
+      // the white rank number left of the block (to catch a right column that starts part-way down)
+      if (hi === 1) { const rc = hc[0] - cellMax - eh * 1.25, top = b.lines[0].cy - eh * 1.1, bot = b.lines[b.lines.length - 1].cy + eh * (b.lines.length > 1 ? 1.1 : 2.2);
+        tm.rankCrop = inkCrop(cv, rc - eh * 1.9, top, eh * 3.3, bot - top, (r, g, bl, l, bg) => l > bg + 70 && l > 150 && Math.abs(r - bl) < 60, 40); }
       for (const l of b.lines) hc.forEach((cx, ci) => {
         const w = l.ws.find(w => Math.abs(w.ex - cx) < W * .04);
         const dx0 = cx - eh * 2.6, dy0 = l.cy - eh * .9;
@@ -2230,19 +2279,31 @@ async function ffReadScreen(img, ocr){
         // names sit in the space between the previous "Eliminations" and this player's number
         const nameR = cx - eh * 2.3, nameL = ci === 0 ? nameR - cellMax + eh * .45 : Math.min(nameR - eh * 3, hc[0] + ew * 1.01);
         const name = inkCrop(cv, nameL, l.cy - eh * .9, nameR - nameL, eh * 1.8, isLightText, 40);
-        const slot = {tm, w, dig, name}; slots.push(slot); tm.players.push(slot);
+        const slot = {tm, w, dig, name, blobs: digitBlobs(cv, dx0, dy0, eh * 2.5, eh * 1.8)}; slots.push(slot); tm.players.push(slot);
       });
     }
   }
+  if (window.__ffDebug) window.__geo = {split, halves, cellMax, eh, ew, W, H};
   if (!teams.length) return null;
   // read every kill number in one pass, then every name in one pass
   const ds = stackCrops(slots.map(s => s.dig), 48);
   const dw = parseTsv(await ocr(ds.cv, {psm: '6', whitelist: '0123456789'}));
   const digitAt = i => dw.filter(w => ds.rowOf(w.y + w.h / 2) === i).map(w => w.text).join('').replace(/\D/g, '');
+  // right column: read its rank numbers and shift the placements if it starts below 6
+  const rt = teams.filter(t => t.half === 1);
+  if (rt.length) {
+    const rs = stackCrops(rt.map(t => t.rankCrop), 48);
+    const rw = parseTsv(await ocr(rs.cv, {psm: '6', whitelist: '0123456789'}));
+    const votes = new Map();
+    rt.forEach((t, i) => { const v = +rw.filter(w => rs.rowOf(w.y + w.h / 2) === i).map(w => w.text).join('').replace(/\D/g, ''); if (v >= 2 && v <= 30) { const off = v - t.place; votes.set(off, (votes.get(off) || 0) + 1); } });
+    const top = [...votes.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (top && top[0] !== 0 && top[0] > 0 && top[1] >= Math.max(1, Math.ceil([...votes.values()].reduce((a, b) => a + b, 0) / 2))) rt.forEach(t => { t.place += top[0]; });
+  }
   const ns = stackCrops(slots.map(s => s.name), 48);
   const nw = parseTsv(await ocr(ns.cv, {psm: '6'}));
   slots.forEach((s, i) => {
     let dtxt = digitAt(i);
+    if (window.FF_DIGITS && s.blobs && s.blobs.length && s.blobs.length <= 2) { const r = s.blobs.map(readDigit); if (r.every(Boolean)) dtxt = r.map(x => x.v).join(''); }
     if (dtxt.length > 2) dtxt = dtxt.slice(0, 2);
     if (dtxt === '' && s.dig && s.dig.aspect < .5) dtxt = '1'; // a lone thin stroke is a 1
     const pre = s.w ? s.w.pre.replace(/[QOo]/g, '0').replace(/[lI|!]/g, '1').replace(/\D/g, '') : '';
@@ -2251,7 +2312,7 @@ async function ffReadScreen(img, ocr){
     s.player = nw.filter(w => ns.rowOf(w.y + w.h / 2) === i).sort((a, b) => a.x - b.x).map(w => w.text).join(' ').trim()
       .replace(/^(?:[^\p{L}\p{N}]+|[\p{L}\p{N}]\s|[a-z]{1,3}\s?(?=[A-Z]{2,}[.\s]))+/u, '').trim(); // stray marks at the crop edge
   });
-  return teams.map(t => ({place: t.place, ...(o => ({team: o.tag, conf: o.conf}))(teamTag(t.players.map(p => p.player))), kills: t.players.reduce((n, p) => n + (p.kills || 0), 0), unread: t.players.some(p => p.kills == null), players: t.players.map(p => ({name: p.player, kills: p.kills}))}));
+  return teams.map(t => ({place: t.place, ...(o => ({team: o.tag, conf: o.conf}))(teamTag(t.players.map(p => p.player))), kills: t.players.reduce((n, p) => n + (p.kills || 0), 0), unread: t.players.some(p => p.kills == null), players: t.players.map(p => ({name: p.player, kills: p.kills, blobs: window.__ffDebug ? p.blobs : undefined}))}));
 }
 async function ocrImages(files){
   if (!window.Tesseract) { setImportMsg('Getting the screenshot reader ready (first time only)…'); await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'); }
