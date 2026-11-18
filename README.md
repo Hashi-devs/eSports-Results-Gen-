@@ -1,4 +1,4 @@
-# Match Day Studio
+# AutoStandings
 
 Results graphics for esports tournaments, from any game. Upload your finished design once, let the app find where the results go, then fill it in (or import the results) and download the graphic at full quality.
 
